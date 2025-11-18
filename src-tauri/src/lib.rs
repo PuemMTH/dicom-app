@@ -16,8 +16,8 @@ use commands::{
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // ไม่ต้อง register! (เพราะเราใช้ features ใน Cargo.toml แล้ว)
-    // dicom_to_png("/home/puemmth/project/test_data_dicom").unwrap();
-    dicom_to_png("/mnt/data/project/test_data_dicom/DICOMtags_testdata1").unwrap();
+    // Test conversion (uncomment to test):
+    dicom_to_png("/mnt/data/project/test_data_dicom/DICOMtags_testdata1", "/tmp/output").unwrap();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
