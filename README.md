@@ -2,6 +2,10 @@
 
 This template should help get you started developing with Tauri, Solid and Typescript in Vite.
 
-## Recommended IDE Setup
+## if using vscode if bug
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+```bash
+export GTK_PATH=""
+export GIO_MODULE_DIR=""
+npm run tauri dev
+```

@@ -25,7 +25,10 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dicom = "0.9.0"
 dicom-object = "0.9.0"
-dicom-pixeldata = { version = "0.9.0", features = ["jpeg", "rle", "jpegxl", "deflate", "openjpeg-sys"] }
+dicom-pixeldata = { version = "0.9.0", features = ["image", "jpeg", "rle", "jpegxl", "deflate", "openjpeg-sys"] }
 dicom-transfer-syntax-registry = "0.9.0"
 tokio = { version = "1", features = ["rt", "rt-multi-thread"] }
-
+owo-colors = "4.2.3"
+nd_array = "0.1.0"
+ndarray = "0.17.1"
+image = "0.24"

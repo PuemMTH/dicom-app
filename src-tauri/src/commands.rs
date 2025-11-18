@@ -1,8 +1,9 @@
 use std::path::Path;
 
-use crate::dicom_processor::summarize_dicom;
+use crate::dicom_processor::{summarize_dicom, convert_dicom_to_png};
 use crate::file_scanner::collect_dicom_file_paths;
 use crate::models::{DicomFileDescriptor, DicomSummary};
+use owo_colors::OwoColorize;
 
 /// Command: อ่านและประมวลผลไฟล์ DICOM เดี่ยว
 #[tauri::command]
@@ -66,4 +67,30 @@ pub fn list_dicom_files(folder_path: &str) -> Result<Vec<DicomFileDescriptor>, S
 #[tauri::command]
 pub fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
+}
+
+#[tauri::command]
+pub fn dicom_to_png(folder_path: &str) -> Result<(), String> {
+    let files = collect_dicom_file_paths(folder_path)?;
+    for dicom_file in files {
+        let folder_path = dicom_file.parent().ok_or("Failed to get parent folder".to_string())?;
+        match convert_dicom_to_png(&dicom_file, folder_path) {
+            Ok(summary) => {
+                print!("Conversion successful for file: {}\n", summary.file_name.green());
+                print!(
+                    "Image dimensions: {}x{}, Bits Allocated: {}\n",
+                    summary.rows.unwrap_or(0),
+                    summary.columns.unwrap_or(0),
+                    summary.bits_allocated.unwrap_or(0)
+                );
+            },
+            Err(err) => {
+                print!("Conversion failed for file: {}\n", dicom_file.display().red());
+                print!("Error: {}\n", err.red());
+            }
+        }
+    }
+    Ok(())
+
+
 }
