@@ -32,7 +32,9 @@ interface AnonymizationReport {
   total: number;
   successful: number;
   failed: number;
+  skipped: number;
   failed_files: string[];
+  skipped_files: string[];
   output_folder: string;
 }
 
@@ -247,6 +249,7 @@ export default function App() {
                     <div class="flex gap-4 text-sm">
                       <span class="text-success font-bold">Success: {anonymizationReport()?.successful}</span>
                       <span class="text-error font-bold">Failed: {anonymizationReport()?.failed}</span>
+                      <span class="text-warning font-bold">Skipped: {anonymizationReport()?.skipped}</span>
                       <span class="font-bold">Total: {anonymizationReport()?.total}</span>
                     </div>
                   </Show>

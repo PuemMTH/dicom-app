@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "dicom-app",
+  "productName": "DICOM App",
   "version": "0.1.0",
   "identifier": "com.puemmth.dicom-app",
   "build": {
@@ -12,9 +12,9 @@
   "app": {
     "windows": [
       {
-        "title": "dicom-app",
+        "title": "DICOM App",
         "width": 800,
-        "height": 650
+        "height": 750
       }
     ],
     "security": {

@@ -68,9 +68,7 @@ where
 
     for path in dicom_files {
         let png_path = build_png_path(input_folder, &png_output_path, &path);
-        if png_path.exists() {
-            continue;
-        }
+        // Removed pre-check: if png_path.exists() { continue; }
 
         let folder_relative = path
             .parent()
@@ -100,6 +98,27 @@ where
                 .and_then(|n| n.to_str())
                 .unwrap_or("unknown")
                 .to_string();
+
+            if png_path.exists() {
+                progress_callback(ProgressPayload {
+                    current,
+                    total,
+                    filename: filename.clone(),
+                    status: "skipped".to_string(),
+                });
+
+                // Try to read metadata from DICOM file for the report
+                let metadata = crate::logic::convert::extract_metadata(dicom_path).ok();
+
+                return (
+                    dicom_path,
+                    Ok(FileOutcome::Skipped {
+                        metadata: metadata.unwrap_or_default(), // Fallback if read fails
+                        reason: "already exists".to_string(),
+                    }),
+                    folder_relative,
+                );
+            }
 
             progress_callback(ProgressPayload {
                 current,

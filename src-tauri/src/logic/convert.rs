@@ -22,23 +22,7 @@ pub fn convert_single_file(dicom_path: &Path, png_path: &Path) -> Result<FileOut
     let obj: DefaultDicomObject = open_file(dicom_path)
         .with_context(|| format!("Failed to open DICOM file {}", dicom_path.display()))?;
 
-    let mut metadata = FileMetadata {
-        folder_relative: PathBuf::new(),
-        file_name: png_path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or_default()
-            .to_string(),
-        study_date: dicom_date(&obj, Tag(0x0008, 0x0020)),
-        modality: dicom_text(&obj, Tag(0x0008, 0x0060)),
-        manufacturer: dicom_text(&obj, Tag(0x0008, 0x0070)),
-        study_description: dicom_text(&obj, Tag(0x0008, 0x1030)),
-        series_description: dicom_text(&obj, Tag(0x0008, 0x103E)),
-        institution_name: dicom_text(&obj, Tag(0x0008, 0x0080)),
-        im_width: None,
-        im_height: None,
-        pixel_spacing: pixel_spacing(&obj),
-    };
+    let mut metadata = extract_metadata(dicom_path)?;
 
     if !has_pixel_data(&obj) {
         let modality = metadata
@@ -99,4 +83,27 @@ fn save_image(image: &DynamicImage, png_path: &Path) -> Result<()> {
         .save(png_path)
         .with_context(|| format!("Unable to save PNG to {}", png_path.display()))?;
     Ok(())
+}
+
+pub fn extract_metadata(dicom_path: &Path) -> Result<FileMetadata> {
+    let obj: DefaultDicomObject = open_file(dicom_path)
+        .with_context(|| format!("Failed to open DICOM file {}", dicom_path.display()))?;
+
+    Ok(FileMetadata {
+        folder_relative: PathBuf::new(),
+        file_name: dicom_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default()
+            .to_string(),
+        study_date: dicom_date(&obj, Tag(0x0008, 0x0020)),
+        modality: dicom_text(&obj, Tag(0x0008, 0x0060)),
+        manufacturer: dicom_text(&obj, Tag(0x0008, 0x0070)),
+        study_description: dicom_text(&obj, Tag(0x0008, 0x1030)),
+        series_description: dicom_text(&obj, Tag(0x0008, 0x103E)),
+        institution_name: dicom_text(&obj, Tag(0x0008, 0x0080)),
+        im_width: None,
+        im_height: None,
+        pixel_spacing: pixel_spacing(&obj),
+    })
 }

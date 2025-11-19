@@ -18,7 +18,9 @@ pub struct AnonymizationReport {
     pub total: usize,
     pub successful: usize,
     pub failed: usize,
+    pub skipped: usize,
     pub failed_files: Vec<String>,
+    pub skipped_files: Vec<String>,
     pub output_folder: PathBuf,
 }
 
@@ -74,13 +76,6 @@ where
                 .unwrap_or("unknown")
                 .to_string();
 
-            progress_callback(ProgressPayload {
-                current,
-                total,
-                filename: filename.clone(),
-                status: "anonymizing".to_string(),
-            });
-
             // Calculate output path preserving relative structure
             let relative_path = dicom_path
                 .strip_prefix(input_folder)
@@ -92,6 +87,46 @@ where
                 let _ = fs::create_dir_all(parent);
             }
 
+            // Check if output file already exists
+            if output_path.exists() {
+                progress_callback(ProgressPayload {
+                    current,
+                    total,
+                    filename: filename.clone(),
+                    status: "skipped".to_string(),
+                });
+
+                let folder_relative = relative_path
+                    .parent()
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| PathBuf::from("."));
+
+                // We need to read metadata even if skipped to include in the report
+                // Try to read from the existing output file first, or the input file if that fails
+                let metadata = match open_file(&output_path) {
+                    Ok(obj) => extract_metadata(&obj, dicom_path).ok(),
+                    Err(_) => {
+                        // Fallback to input file
+                        open_file(dicom_path)
+                            .ok()
+                            .and_then(|obj| extract_metadata(&obj, dicom_path).ok())
+                    }
+                };
+
+                return (
+                    dicom_path,
+                    Ok(AnonymizeOutcome::Skipped(metadata)),
+                    folder_relative,
+                );
+            }
+
+            progress_callback(ProgressPayload {
+                current,
+                total,
+                filename: filename.clone(),
+                status: "anonymizing".to_string(),
+            });
+
             let outcome = anonymize_single_file(
                 dicom_path,
                 &output_path,
@@ -99,17 +134,24 @@ where
                 &replacement_value,
             );
 
+            let final_outcome = match outcome {
+                Ok(meta) => Ok(AnonymizeOutcome::Success(meta)),
+                Err(e) => Err(e),
+            };
+
             let folder_relative = relative_path
                 .parent()
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from("."));
 
-            (dicom_path, outcome, folder_relative)
+            (dicom_path, final_outcome, folder_relative)
         })
         .collect();
 
     let mut successful = 0usize;
+    let mut skipped = 0usize;
     let mut failed_files = Vec::new();
+    let mut skipped_files = Vec::new();
     let mut all_metadata = Vec::new();
     let mut folder_metadata: BTreeMap<PathBuf, Vec<FileMetadata>> = BTreeMap::new();
 
@@ -124,9 +166,27 @@ where
         };
 
         match outcome {
-            Ok(metadata) => {
+            Ok(AnonymizeOutcome::Success(metadata)) => {
                 register_metadata(metadata);
                 successful += 1;
+            }
+            Ok(AnonymizeOutcome::Skipped(metadata_opt)) => {
+                if let Some(metadata) = metadata_opt {
+                    register_metadata(metadata);
+                }
+                skipped += 1;
+                skipped_files.push(
+                    dicom_path
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .map(String::from)
+                        .unwrap_or_else(|| dicom_path.to_string_lossy().to_string()),
+                );
+                println!(
+                    "{} Skipping {} (already exists)",
+                    "∙".cyan(),
+                    dicom_path.display()
+                );
             }
             Err(err) => {
                 eprintln!(
@@ -153,10 +213,17 @@ where
     Ok(AnonymizationReport {
         total,
         successful,
-        failed: total.saturating_sub(successful),
+        failed: total.saturating_sub(successful + skipped),
+        skipped,
         failed_files,
+        skipped_files,
         output_folder: root_output_path,
     })
+}
+
+enum AnonymizeOutcome {
+    Success(FileMetadata),
+    Skipped(Option<FileMetadata>),
 }
 
 fn anonymize_single_file(

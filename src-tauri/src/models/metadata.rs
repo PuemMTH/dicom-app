@@ -3,7 +3,7 @@ use dicom::core::Tag;
 use dicom_object::DefaultDicomObject;
 use std::path::PathBuf;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct FileMetadata {
     pub folder_relative: PathBuf,
     pub file_name: String,
