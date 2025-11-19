@@ -2,21 +2,32 @@ use tauri::{AppHandle, Emitter};
 use tauri_plugin_opener::OpenerExt;
 
 #[tauri::command]
-pub async fn convert_dicom(app: AppHandle, input: String, output: String, skip_excel: bool) {
+pub async fn convert_dicom(
+    app: AppHandle,
+    input: String,
+    output: String,
+    skip_excel: bool,
+    flatten_output: bool,
+) -> Result<crate::logic::workflow::ConversionReport, String> {
     use crate::logic::workflow::convert_dicom_to_png;
-    if let Ok(report) = convert_dicom_to_png(
+    match convert_dicom_to_png(
         std::path::Path::new(&input),
         std::path::Path::new(&output),
         !skip_excel,
+        flatten_output,
         |progress| {
             let _ = app.emit("conversion_progress", progress);
         },
     ) {
-        // Open the output folder after conversion completes
-        let _ = app.opener().open_url(
-            report.output_folder.to_string_lossy().as_ref(),
-            None::<&str>,
-        );
+        Ok(report) => {
+            // Open the output folder after conversion completes
+            let _ = app.opener().open_url(
+                report.output_folder.to_string_lossy().as_ref(),
+                None::<&str>,
+            );
+            Ok(report)
+        }
+        Err(e) => Err(e.to_string()),
     }
 }
 
@@ -27,9 +38,9 @@ pub async fn anonymize_dicom(
     output: String,
     tags: Vec<(u16, u16)>,
     replacement: String,
-) {
+) -> Result<crate::logic::anonymize::AnonymizationReport, String> {
     use crate::logic::anonymize::anonymize_dicom;
-    if let Ok(report) = anonymize_dicom(
+    match anonymize_dicom(
         std::path::Path::new(&input),
         std::path::Path::new(&output),
         tags,
@@ -38,10 +49,14 @@ pub async fn anonymize_dicom(
             let _ = app.emit("anonymization_progress", progress);
         },
     ) {
-        // Open the output folder after anonymization completes
-        let _ = app.opener().open_url(
-            report.output_folder.to_string_lossy().as_ref(),
-            None::<&str>,
-        );
+        Ok(report) => {
+            // Open the output folder after anonymization completes
+            let _ = app.opener().open_url(
+                report.output_folder.to_string_lossy().as_ref(),
+                None::<&str>,
+            );
+            Ok(report)
+        }
+        Err(e) => Err(e.to_string()),
     }
 }

@@ -1,6 +1,7 @@
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, onCleanup, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { listen } from "@tauri-apps/api/event";
 import createPersistent from 'solid-persistent'
 import Dialog from '@corvu/dialog'
 import logo from "../assets/logo_nectec.png";
@@ -8,47 +9,78 @@ import "../App.css";
 import NavBar from "../components/Navbar"
 import SelectInputFolder from "../components/SelectInputFolder";
 import SelectOutputFolder from "../components/SelectOutputFolder";
-import StartConvert from "../components/StartConvert";
 import ExportFormatSelector, { ExportFormat } from "../components/ExportFormatSelector";
-import ProgressLog from "../components/ProgressLog";
 
-type DicomStatus = "ok" | "error";
+interface ProgressPayload {
+  current: number;
+  total: number;
+  filename: string;
+  status: string;
+}
 
-type DicomSummary = {
-  fileName: string;
-  filePath: string;
-  rows?: number;
-  columns?: number;
-  bitsAllocated?: number;
-  transferSyntax?: string;
-  status: DicomStatus;
-  message?: string;
-};
+interface ConversionReport {
+  total: number;
+  successful: number;
+  failed: number;
+  skipped_non_image: number;
+  failed_files: string[];
+  skipped_files: string[];
+  output_folder: string;
+}
 
-type DicomFileDescriptor = {
-  fileName: string;
-  filePath: string;
-};
+interface AnonymizationReport {
+  total: number;
+  successful: number;
+  failed: number;
+  failed_files: string[];
+  output_folder: string;
+}
 
 export default function App() {
   // State Management
-  const [dicomSummaries, setDicomSummaries] = createSignal<DicomSummary[]>([]);
-  const [dicomError, setDicomError] = createSignal("");
   const [inputPath, setInputPath] = createSignal("");
   const [outputPath, setOutputPath] = createSignal("");
-  const [exportFormat, setExportFormat] = createSignal<ExportFormat>("DICOM");
-  const [dicomProgress, setDicomProgress] = createSignal({ processed: 0, total: 0 });
-  const [pngProgress, setPngProgress] = createSignal({ processed: 0, total: 0 });
-  const [logEntries, setLogEntries] = createSignal<string[]>([]);
+  const [exportFormats, setExportFormats] = createSignal<ExportFormat[]>(["DICOM"]);
+
+  // Separate Progress States
+  const [anonymizeProgress, setAnonymizeProgress] = createSignal<ProgressPayload | null>(null);
+  const [convertProgress, setConvertProgress] = createSignal<ProgressPayload | null>(null);
+
+  const [isProcessing, setIsProcessing] = createSignal(false);
+
+  // Configuration (Hidden/Default)
+  const tagsInput = "0010,0010; 0010,0020; 0010,0030; 0008,0080; 0008,0090";
+  const replacementValue = "ANONYMIZED";
+  const skipExcel = false;
+
+  // Reports
+  const [conversionReport, setConversionReport] = createSignal<ConversionReport | null>(null);
+  const [anonymizationReport, setAnonymizationReport] = createSignal<AnonymizationReport | null>(null);
 
   const DialogContent = createPersistent(DialogInfomation)
+
+  const setupListeners = async () => {
+    const unlistenConvert = await listen<ProgressPayload>("conversion_progress", (event) => {
+      setConvertProgress(event.payload);
+    });
+    const unlistenAnonymize = await listen<ProgressPayload>("anonymization_progress", (event) => {
+      setAnonymizeProgress(event.payload);
+    });
+
+    onCleanup(() => {
+      unlistenConvert();
+      unlistenAnonymize();
+    });
+  };
+
+  setupListeners();
+
   async function selectInputFolder() {
     const selectedPath = await open({
       multiple: false,
       directory: true,
     });
-    if (!selectedPath) return;
-    if (typeof selectedPath === "string") {
+    if (selectedPath && typeof selectedPath === "string") {
       setInputPath(selectedPath);
     }
   }
@@ -58,60 +90,101 @@ export default function App() {
       multiple: false,
       directory: true,
     });
-    if (!selectedPath) return;
-    if (typeof selectedPath === "string") {
+    if (selectedPath && typeof selectedPath === "string") {
       setOutputPath(selectedPath);
     }
   }
 
-  async function startConvert() {
+  const resetState = () => {
+    setAnonymizeProgress(null);
+    setConvertProgress(null);
+    setConversionReport(null);
+    setAnonymizationReport(null);
+  };
+
+  const handleProcess = async () => {
     if (!inputPath() || !outputPath()) {
-      setDicomError("กรุณาเลือกทั้ง Input และ Output");
+      alert("Please select both Input and Output folders.");
       return;
     }
 
-    const formatsToExport: ExportFormat[] = exportFormat() === "DICOM" ? ["DICOM"] : ["DICOM", "PNG"];
-    const files = await invoke<DicomFileDescriptor[]>("list_dicom_files", { folderPath: inputPath() });
-    const totalFiles = files.length;
+    const doAnonymize = exportFormats().includes("DICOM");
+    const doConvert = exportFormats().includes("PNG");
 
-    if (totalFiles === 0) {
-      setDicomError("ไม่พบไฟล์ .dcm ในโฟลเดอร์ Input");
+    if (!doAnonymize && !doConvert) {
+      alert("Please select at least one export format.");
       return;
     }
 
-    // Reset Progress & Logs
-    setDicomProgress({ processed: 0, total: totalFiles });
-    setPngProgress({ processed: 0, total: totalFiles });
-    setLogEntries([]);
+    setIsProcessing(true);
+    resetState();
 
-    for (const file of files) {
+    try {
+      let currentInput = inputPath();
+      let currentOutput = outputPath();
+      let flattenConvert = false;
 
-      if (formatsToExport.includes("DICOM")) {
-        await invoke("save_anonymized_file", { inputPath: file.filePath, outputFolder: outputPath() });
-        setDicomProgress((prev) => ({ ...prev, processed: prev.processed + 1 }));
-        setLogEntries((prev) => [...prev, `DICOM: ${file.fileName} processed.`]);
+      // 1. Anonymize
+      if (doAnonymize) {
+        // Parse tags
+        const tags: [number, number][] = [];
+        try {
+          const rawTags = tagsInput.split(";");
+          for (const raw of rawTags) {
+            const parts = raw.trim().split(",");
+            if (parts.length !== 2) throw new Error(`Invalid tag format: ${raw}`);
+            const group = parseInt(parts[0], 16);
+            const element = parseInt(parts[1], 16);
+            if (isNaN(group) || isNaN(element)) throw new Error(`Invalid hex values: ${raw}`);
+            tags.push([group, element]);
+          }
+        } catch (e) {
+          alert(`Error parsing tags: ${e}`);
+          setIsProcessing(false);
+          return;
+        }
+
+        const report = await invoke<AnonymizationReport>("anonymize_dicom", {
+          input: currentInput,
+          output: currentOutput,
+          tags: tags,
+          replacement: replacementValue,
+        });
+        setAnonymizationReport(report);
+
+        // Setup for next step (Conversion)
+        currentInput = `${report.output_folder}/dicom_file`;
+        currentOutput = report.output_folder;
+        flattenConvert = true;
       }
 
-      if (formatsToExport.includes("PNG")) {
-        await invoke("convert_to_png", { inputPath: file.filePath, outputFolder: outputPath() });
-        setPngProgress((prev) => ({ ...prev, processed: prev.processed + 1 }));
-        setLogEntries((prev) => [...prev, `PNG: ${file.fileName} converted.`]);
+      // 2. Convert
+      if (doConvert) {
+        const report = await invoke<ConversionReport>("convert_dicom", {
+          input: currentInput,
+          output: currentOutput,
+          skipExcel: skipExcel,
+          flattenOutput: flattenConvert,
+        });
+        setConversionReport(report);
       }
+
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsProcessing(false);
     }
-
-    setDicomSummaries(files.map((f) => ({ fileName: f.fileName, filePath: f.filePath, status: "ok" })));
-  }
+  };
 
   return (
     <div>
       <div class="min-h-screen ">
-        <NavBar />
-        <div class="container mx-auto px-4 py-8 bg-base-200">
+        {/* <NavBar /> */}
+        <div class="container mx-auto px-4 py-8">
           <div class=" mb-4 flex flex-row justify-between">
             {/* Header Section */}
             <div class="flex justify-start items-end gap-4">
-              <h1 class="text-4xl font-bold text-amber-500 mb-2">DICOM Anonymizeation Tool</h1>
-              <a href="/test" class="btn btn-sm btn-ghost mb-2">Test Page</a>
+              <h1 class="text-4xl font-bold text-amber-500 mb-2">DICOM Anonymization Tool</h1>
             </div>
             <div class="flex justify-end">
               <Dialog>
@@ -134,7 +207,7 @@ export default function App() {
           </div>
 
           {/* Action Card */}
-          <div class="card bg-base-100 shadow-xl">
+          <div class="card bg-base-100 shadow-xl mb-6">
             <div class="card-body">
               <SelectInputFolder
                 path={inputPath()}
@@ -144,19 +217,77 @@ export default function App() {
                 path={outputPath()}
                 onSelect={selectOutputFolder}
               />
-              <div class="flex flex-row justify-between items-center mt-2">
-                <ExportFormatSelector onChange={setExportFormat} />
-                <StartConvert onStart={startConvert} />
-              </div>
-              <ProgressLog
-                dicomProgress={dicomProgress()}
-                pngProgress={pngProgress()}
-                logs={logEntries()}
-              />
 
+              <div class="divider"></div>
+
+              <div class="flex flex-row justify-between items-center">
+                <ExportFormatSelector
+                  selected={exportFormats()}
+                  onChange={setExportFormats}
+                />
+                <button
+                  class="btn btn-primary"
+                  onClick={handleProcess}
+                  disabled={isProcessing() || !inputPath() || !outputPath()}
+                >
+                  {isProcessing() ? "Processing..." : "Start Processing"}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Progress & Results Section */}
+          <div class="flex flex-col gap-4 mb-6">
+            {/* Anonymization Progress */}
+            <div class={`card bg-base-100 shadow-sm border border-base-300 transition-all duration-300 ${exportFormats().includes("DICOM") ? "opacity-100" : "opacity-50 grayscale"}`}>
+              <div class="card-body p-4">
+                <div class="flex justify-between items-center mb-2">
+                  <h3 class="font-bold text-primary">Anonymization</h3>
+                  <Show when={anonymizationReport()}>
+                    <div class="flex gap-4 text-sm">
+                      <span class="text-success font-bold">Success: {anonymizationReport()?.successful}</span>
+                      <span class="text-error font-bold">Failed: {anonymizationReport()?.failed}</span>
+                      <span class="font-bold">Total: {anonymizationReport()?.total}</span>
+                    </div>
+                  </Show>
+                </div>
+                <progress
+                  class="progress progress-primary w-full"
+                  value={anonymizeProgress()?.current || (anonymizationReport() ? 100 : 0)}
+                  max={anonymizeProgress()?.total || (anonymizationReport() ? 100 : 100)}
+                ></progress>
+                <p class="text-xs text-gray-500 mt-1 truncate">
+                  {anonymizeProgress() ? `Processing: ${anonymizeProgress()?.filename}` : (anonymizationReport() ? "Completed" : "Waiting...")}
+                </p>
+              </div>
             </div>
 
+            {/* Conversion Progress */}
+            <div class={`card bg-base-100 shadow-sm border border-base-300 transition-all duration-300 ${exportFormats().includes("PNG") ? "opacity-100" : "opacity-50 grayscale"}`}>
+              <div class="card-body p-4">
+                <div class="flex justify-between items-center mb-2">
+                  <h3 class="font-bold text-secondary">Conversion</h3>
+                  <Show when={conversionReport()}>
+                    <div class="flex gap-4 text-sm">
+                      <span class="text-success font-bold">Success: {conversionReport()?.successful}</span>
+                      <span class="text-error font-bold">Failed: {conversionReport()?.failed}</span>
+                      <span class="text-warning font-bold">Skipped: {conversionReport()?.skipped_non_image}</span>
+                      <span class="font-bold">Total: {conversionReport()?.total}</span>
+                    </div>
+                  </Show>
+                </div>
+                <progress
+                  class="progress progress-secondary w-full"
+                  value={convertProgress()?.current || (conversionReport() ? 100 : 0)}
+                  max={convertProgress()?.total || (conversionReport() ? 100 : 100)}
+                ></progress>
+                <p class="text-xs text-gray-500 mt-1 truncate">
+                  {convertProgress() ? `Processing: ${convertProgress()?.filename}` : (conversionReport() ? "Completed" : "Waiting...")}
+                </p>
+              </div>
+            </div>
           </div>
+
           <img
             class="w-96 h-auto mx-auto mt-6"
             src={String(logo)}
@@ -164,7 +295,7 @@ export default function App() {
           />
         </div>
       </div>
-    </div>
+    </div >
   )
 }
 
@@ -181,18 +312,6 @@ const DialogInfomation = () => (
       <br />- Referring Physician Name
       <br />
       <br />Version 2.0.0
-      {/* Decriptions Tags Version */}
-      {/* "
-      2.0.0": 
-        "Add output Log file in format .csv and .xlsx",
-        "Add version information in anonymization info",
-        "Set default PNG checkbox to unchecked"
-      "1.0.7":
-        "Fixed popup ask yes or no to ask ok or cancel",
-        "Edited output build name"
-      "1.0.6":
-        "Fixed when file already exists To overwrite Instead of deleting and redo",
-      */}
     </Dialog.Description>
     <div class=" flex justify-center">
       <Dialog.Close class="rounded-md bg-amber-500 px-3 py-2 mt-4 hover:bg-amber-600">

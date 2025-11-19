@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use uuid::Uuid;
 
+#[derive(Clone, serde::Serialize)]
 pub struct AnonymizationReport {
     pub total: usize,
     pub successful: usize,
@@ -49,12 +50,13 @@ where
         .and_then(|n| n.to_str())
         .unwrap_or("dicom");
 
-    let root_output_path = output_folder.join(format!("{}_anonymized", input_name));
+    let root_output_path = output_folder.join(format!("{}_output", input_name));
+    let dicom_output_path = root_output_path.join("dicom_file");
 
-    fs::create_dir_all(&root_output_path).with_context(|| {
+    fs::create_dir_all(&dicom_output_path).with_context(|| {
         format!(
             "Unable to create output folder {}",
-            root_output_path.display()
+            dicom_output_path.display()
         )
     })?;
 
@@ -84,7 +86,7 @@ where
                 .strip_prefix(input_folder)
                 .unwrap_or_else(|_| Path::new(&filename));
 
-            let output_path = root_output_path.join(relative_path);
+            let output_path = dicom_output_path.join(relative_path);
 
             if let Some(parent) = output_path.parent() {
                 let _ = fs::create_dir_all(parent);
@@ -145,7 +147,7 @@ where
     }
 
     // Write metadata report
-    write_metadata_workbooks(&all_metadata, &folder_metadata, &root_output_path)
+    write_metadata_workbooks(&all_metadata, &folder_metadata, &dicom_output_path)
         .context("Unable to write Excel metadata files")?;
 
     Ok(AnonymizationReport {

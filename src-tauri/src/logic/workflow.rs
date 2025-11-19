@@ -10,6 +10,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+#[derive(Clone, serde::Serialize)]
 pub struct ConversionReport {
     pub total: usize,
     pub successful: usize,
@@ -32,6 +33,7 @@ pub fn convert_dicom_to_png<F>(
     input_folder: &Path,
     output_folder: &Path,
     save_excel: bool,
+    flatten_output: bool,
     progress_callback: F,
 ) -> Result<ConversionReport>
 where
@@ -47,7 +49,11 @@ where
         .and_then(|n| n.to_str())
         .unwrap_or("dicom");
 
-    let root_output_path = output_folder.join(format!("{}_output", input_name));
+    let root_output_path = if flatten_output {
+        output_folder.to_path_buf()
+    } else {
+        output_folder.join(format!("{}_output", input_name))
+    };
     let png_output_path = root_output_path.join("png_file");
 
     fs::create_dir_all(&png_output_path).with_context(|| {
