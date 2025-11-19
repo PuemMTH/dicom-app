@@ -68,8 +68,18 @@ fn write_metadata_sheet(path: &Path, rows: &[FileMetadata]) -> Result<()> {
         write_optional_string(&mut worksheet, row, 1, metadata.study_date.as_deref())?;
         write_optional_string(&mut worksheet, row, 2, metadata.modality.as_deref())?;
         write_optional_string(&mut worksheet, row, 3, metadata.manufacturer.as_deref())?;
-        write_optional_string(&mut worksheet, row, 4, metadata.study_description.as_deref())?;
-        write_optional_string(&mut worksheet, row, 5, metadata.series_description.as_deref())?;
+        write_optional_string(
+            &mut worksheet,
+            row,
+            4,
+            metadata.study_description.as_deref(),
+        )?;
+        write_optional_string(
+            &mut worksheet,
+            row,
+            5,
+            metadata.series_description.as_deref(),
+        )?;
         write_optional_string(&mut worksheet, row, 6, metadata.institution_name.as_deref())?;
         write_optional_number(&mut worksheet, row, 7, metadata.im_width)?;
         write_optional_number(&mut worksheet, row, 8, metadata.im_height)?;

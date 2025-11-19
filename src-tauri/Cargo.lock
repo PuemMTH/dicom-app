@@ -1018,6 +1018,7 @@ dependencies = [
  "nd_array",
  "ndarray",
  "owo-colors",
+ "rayon",
  "rust_xlsxwriter",
  "serde",
  "serde_json",
@@ -1026,6 +1027,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-opener",
  "tokio",
+ "uuid",
  "walkdir",
 ]
 

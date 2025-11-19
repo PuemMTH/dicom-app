@@ -109,8 +109,9 @@ export default function App() {
         <div class="container mx-auto px-4 py-8 bg-base-200">
           <div class=" mb-4 flex flex-row justify-between">
             {/* Header Section */}
-            <div class="flex justify-start items-end">
+            <div class="flex justify-start items-end gap-4">
               <h1 class="text-4xl font-bold text-amber-500 mb-2">DICOM Anonymizeation Tool</h1>
+              <a href="/test" class="btn btn-sm btn-ghost mb-2">Test Page</a>
             </div>
             <div class="flex justify-end">
               <Dialog>
