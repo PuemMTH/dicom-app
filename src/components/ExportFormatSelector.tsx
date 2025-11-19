@@ -1,26 +1,23 @@
-import { Component, createSignal } from "solid-js";
+import { Component } from "solid-js";
 
 export type ExportFormat = "DICOM" | "PNG";
 
 interface Props {
+  selected: ExportFormat[];
   onChange: (formats: ExportFormat[]) => void;
 }
 
 const ExportFormatSelector: Component<Props> = (props) => {
-  const [selectedFormats, setSelectedFormats] = createSignal<ExportFormat[]>(["DICOM"]);
-
   const toggleFormat = (format: ExportFormat) => {
-    const current = selectedFormats();
+    const current = props.selected;
     if (current.includes(format)) {
-      // เอาออก (ยกเว้นต้องมีอย่างน้อย 1 ตัว)
+      // Ensure at least one format is selected
       if (current.length > 1) {
         const updated = current.filter((f) => f !== format);
-        setSelectedFormats(updated);
         props.onChange(updated);
       }
     } else {
       const updated = [...current, format];
-      setSelectedFormats(updated);
       props.onChange(updated);
     }
   };
@@ -31,9 +28,9 @@ const ExportFormatSelector: Component<Props> = (props) => {
         <label class="flex items-center gap-2 cursor-pointer">
           <input
             type="checkbox"
-            checked={selectedFormats().includes(f)}
+            checked={props.selected.includes(f)}
             onChange={() => toggleFormat(f)}
-            class="w-6 h-6"
+            class="checkbox checkbox-primary"
           />
           <span>{f}</span>
         </label>

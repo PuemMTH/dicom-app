@@ -1,6 +1,6 @@
 {
   "name": "dicom-app",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "description": "",
   "type": "module",
   "scripts": {
@@ -13,6 +13,7 @@
   "license": "MIT",
   "dependencies": {
     "@corvu/dialog": "^0.2.4",
+    "@solid-primitives/storage": "^4.3.3",
     "@solidjs/router": "^0.15.4",
     "@tailwindcss/vite": "^4.1.17",
     "@tauri-apps/api": "^2",

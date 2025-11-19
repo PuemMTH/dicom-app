@@ -1,6 +1,6 @@
 [package]
 name = "dicom-app"
-version = "0.1.0"
+version = "2.0.0"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -32,3 +32,10 @@ owo-colors = "4.2.3"
 nd_array = "0.1.0"
 ndarray = "0.17.1"
 image = "0.24"
+anyhow = "1"
+clap = { version = "4.5", features = ["derive"] }
+walkdir = "2.5"
+rust_xlsxwriter = "0.64.0"
+chrono = "0.4"
+rayon = "1.11.0"
+uuid = { version = "1.10.0", features = ["v4"] }

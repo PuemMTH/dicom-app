@@ -1,7 +1,7 @@
 import NavBar from "../components/Navbar";
 import logo from "../assets/logo_nectec.png";
 
-export default function Logs() {
+export default function LogsPage() {
   return (
     <div class="min-h-screen">
       <NavBar />
