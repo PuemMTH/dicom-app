@@ -10,63 +10,57 @@ DICOM file processing application built with Tauri + Solid + TypeScript
 - **Detailed Statistics**: Track successful/failed conversions with error details
 - **Python-Compatible Output**: Output structure matches Python dicom-converter format
 
-## DICOM to PNG Conversion
+## Architecture
 
-### Command: `dicom_to_png`
+The application follows a client-server architecture using Tauri's IPC protocol to communicate between the SolidJS frontend and the Rust backend.
 
-**Parameters:**
-- `input_folder`: Path to folder containing DICOM files
-- `output_folder`: Path where output will be saved
+```mermaid
+graph TD
+    subgraph Frontend ["Frontend (SolidJS)"]
+        Page["HomePage.tsx"]
+        Store["State Management"]
+        Invoke["Tauri Invoke"]
+        Listener["Event Listener"]
+    end
 
-**Output Structure:**
-```
-output_folder/
-└── output_{input_folder_name}/
-    └── png_file/
-        └── [preserved folder structure]/
-            └── *.png files
-```
+    subgraph Backend ["Backend (Rust)"]
+        Command["process_dicom (commands.rs)"]
+        
+        subgraph Logic ["Business Logic"]
+            Workflow["workflow.rs"]
+            Anonymize["anonymize.rs"]
+            Convert["convert.rs"]
+        end
+    end
 
-**Supported Transfer Syntaxes:**
-- JPEG Baseline (1.2.840.10008.1.2.4.50)
-- JPEG 2000 (openjpeg-sys)
-- RLE Lossless
-- JPEG-XL
-- Deflate
-- JPEG Lossless (requires charls - see installation notes below)
+    %% User Interaction
+    Page -->|"User Input"| Store
+    Store -->|"Start Processing"| Invoke
 
-**Note on JPEG Lossless Support:**
-To enable JPEG Lossless transfer syntax support, you need to install system dependencies:
-```bash
-sudo apt-get update
-sudo apt-get install build-essential cmake
-```
-Then rebuild the project.
+    %% IPC Call
+    Invoke -->|"invoke('process_dicom', input)"| Command
 
-**Return Value:**
-```typescript
-{
-  mainOutputFolder: string,
-  total: number,
-  successful: number,
-  failed: number,
-  failedFiles: string[],
-  errorDetails: FileDetail[],
-  allFileDetails: FileDetail[]
-}
+    %% Backend Processing
+    Command -->|"If Convert"| Workflow
+    Command -->|"If Anonymize"| Anonymize
+    Workflow --> Convert
+
+    %% Progress Reporting
+    Workflow -.->|"emit('conversion_progress')"| Listener
+    Anonymize -.->|"emit('anonymization_progress')"| Listener
+
+    %% Feedback Loop
+    Listener -->|"Update UI"| Page
 ```
 
-### FileDetail Structure:
-```typescript
-{
-  fileName: string,
-  filePath: string,
-  success: boolean,
-  errorType?: string,
-  errorMessage?: string,
-  conversionType: "PNG" | "DICOM"
-}
-```
+### Communication Protocol
+- **Protocol**: Tauri IPC (Inter-Process Communication)
+- **Command**: `process_dicom`
+  - **Input**: `DicomProcessInput` (JSON) containing paths and configuration for conversion/anonymization.
+  - **Output**: `ProcessReport` (JSON) containing success/failure statistics.
+- **Events**:
+  - `conversion_progress`: Real-time updates during PNG conversion.
+  - `anonymization_progress`: Real-time updates during DICOM anonymization.
 
 ## Development
 
