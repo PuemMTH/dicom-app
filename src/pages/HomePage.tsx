@@ -2,11 +2,11 @@ import { createSignal, onCleanup, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
+import { makePersisted } from "@solid-primitives/storage";
 import createPersistent from 'solid-persistent'
 import Dialog from '@corvu/dialog'
 import logo from "../assets/logo_nectec.png";
 import "../App.css";
-import NavBar from "../components/Navbar"
 import SelectInputFolder from "../components/SelectInputFolder";
 import SelectOutputFolder from "../components/SelectOutputFolder";
 import ExportFormatSelector, { ExportFormat } from "../components/ExportFormatSelector";
@@ -38,10 +38,15 @@ interface AnonymizationReport {
   output_folder: string;
 }
 
-export default function App() {
-  // State Management
-  const [inputPath, setInputPath] = createSignal("");
-  const [outputPath, setOutputPath] = createSignal("");
+interface ProcessReport {
+  conversion: ConversionReport | null;
+  anonymization: AnonymizationReport | null;
+}
+
+export default function HomePage() {
+  // State Management with localStorage persistence
+  const [inputPath, setInputPath] = makePersisted(createSignal(""), { name: "dicom-input-path" });
+  const [outputPath, setOutputPath] = makePersisted(createSignal(""), { name: "dicom-output-path" });
   const [exportFormats, setExportFormats] = createSignal<ExportFormat[]>(["DICOM"]);
 
   // Separate Progress States
@@ -122,14 +127,9 @@ export default function App() {
     resetState();
 
     try {
-      let currentInput = inputPath();
-      let currentOutput = outputPath();
-      let flattenConvert = false;
-
-      // 1. Anonymize
+      // Parse tags for anonymization
+      let tags: [number, number][] = [];
       if (doAnonymize) {
-        // Parse tags
-        const tags: [number, number][] = [];
         try {
           const rawTags = tagsInput.split(";");
           for (const raw of rawTags) {
@@ -145,30 +145,75 @@ export default function App() {
           setIsProcessing(false);
           return;
         }
-
-        const report = await invoke<AnonymizationReport>("anonymize_dicom", {
-          input: currentInput,
-          output: currentOutput,
-          tags: tags,
-          replacement: replacementValue,
-        });
-        setAnonymizationReport(report);
-
-        // Setup for next step (Conversion)
-        currentInput = `${report.output_folder}/dicom_file`;
-        currentOutput = report.output_folder;
-        flattenConvert = true;
       }
 
-      // 2. Convert
-      if (doConvert) {
-        const report = await invoke<ConversionReport>("convert_dicom", {
-          input: currentInput,
-          output: currentOutput,
-          skipExcel: skipExcel,
-          flattenOutput: flattenConvert,
-        });
-        setConversionReport(report);
+      // Build input object for process_dicom
+      const processInput: {
+        convert?: {
+          input: string;
+          output: string;
+          skip_excel: boolean;
+          flatten_output: boolean;
+        };
+        anonymize?: {
+          input: string;
+          output: string;
+          tags: [number, number][];
+          replacement: string;
+        };
+      } = {};
+
+      // 1. Anonymize first if requested
+      if (doAnonymize) {
+        processInput.anonymize = {
+          input: inputPath(),
+          output: outputPath(),
+          tags: tags,
+          replacement: replacementValue,
+        };
+      }
+
+      // If only converting (no anonymize), set convert input
+      if (doConvert && !doAnonymize) {
+        processInput.convert = {
+          input: inputPath(),
+          output: outputPath(),
+          skip_excel: skipExcel,
+          flatten_output: false,
+        };
+      }
+
+      // Call process_dicom
+      const report = await invoke<ProcessReport>("process_dicom", {
+        input: processInput,
+      });
+
+      if (report.anonymization) {
+        setAnonymizationReport(report.anonymization);
+        setAnonymizeProgress(null); // Clear progress to show completed state
+
+        // If conversion is also requested, call it with anonymized output
+        if (doConvert) {
+          const conversionReport = await invoke<ProcessReport>("process_dicom", {
+            input: {
+              convert: {
+                input: `${report.anonymization.output_folder}/dicom_file`,
+                output: report.anonymization.output_folder,
+                skip_excel: skipExcel,
+                flatten_output: true,
+              },
+            },
+          });
+          if (conversionReport.conversion) {
+            setConversionReport(conversionReport.conversion);
+            setConvertProgress(null); // Clear progress to show completed state
+          }
+        }
+      }
+
+      if (report.conversion) {
+        setConversionReport(report.conversion);
+        setConvertProgress(null); // Clear progress to show completed state
       }
 
     } catch (error) {
@@ -260,7 +305,14 @@ export default function App() {
                   max={anonymizeProgress()?.total || (anonymizationReport() ? 100 : 100)}
                 ></progress>
                 <p class="text-xs text-gray-500 mt-1 truncate">
-                  {anonymizeProgress() ? `Processing: ${anonymizeProgress()?.filename}` : (anonymizationReport() ? "Completed" : "Waiting...")}
+                  {anonymizeProgress() ? (
+                    <span>
+                      <span class={anonymizeProgress()?.status === "skipped" ? "text-warning" : "text-info"}>
+                        [{anonymizeProgress()?.status}]
+                      </span>
+                      {" "}{anonymizeProgress()?.current}/{anonymizeProgress()?.total}: {anonymizeProgress()?.filename}
+                    </span>
+                  ) : (anonymizationReport() ? "Completed" : "Waiting...")}
                 </p>
               </div>
             </div>
@@ -285,7 +337,14 @@ export default function App() {
                   max={convertProgress()?.total || (conversionReport() ? 100 : 100)}
                 ></progress>
                 <p class="text-xs text-gray-500 mt-1 truncate">
-                  {convertProgress() ? `Processing: ${convertProgress()?.filename}` : (conversionReport() ? "Completed" : "Waiting...")}
+                  {convertProgress() ? (
+                    <span>
+                      <span class={convertProgress()?.status === "skipped" ? "text-warning" : "text-info"}>
+                        [{convertProgress()?.status}]
+                      </span>
+                      {" "}{convertProgress()?.current}/{convertProgress()?.total}: {convertProgress()?.filename}
+                    </span>
+                  ) : (conversionReport() ? "Completed" : "Waiting...")}
                 </p>
               </div>
             </div>

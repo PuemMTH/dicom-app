@@ -1,5 +1,5 @@
 // Import commands
-use crate::commands::{anonymize_dicom, convert_dicom};
+use crate::commands::{anonymize_dicom, convert_dicom, process_dicom};
 
 // Modules
 mod commands;
@@ -12,7 +12,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![convert_dicom, anonymize_dicom])
+        .invoke_handler(tauri::generate_handler![
+            convert_dicom,
+            anonymize_dicom,
+            process_dicom
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
