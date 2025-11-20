@@ -161,3 +161,33 @@ pub struct ProcessReport {
     pub conversion: Option<crate::logic::workflow::ConversionReport>,
     pub anonymization: Option<crate::logic::anonymize::AnonymizationReport>,
 }
+
+#[tauri::command]
+pub async fn get_dicom_tags(path: String) -> Result<Vec<crate::logic::tags::DicomTag>, String> {
+    crate::logic::tags::read_all_tags(std::path::Path::new(&path)).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn list_dicom_files(folder: String) -> Result<Vec<String>, String> {
+    let path = std::path::Path::new(&folder);
+    if !path.exists() || !path.is_dir() {
+        return Err("Invalid folder path".to_string());
+    }
+    let files = crate::utils::discovery::collect_dicom_files(path);
+    Ok(files
+        .into_iter()
+        .map(|p| p.to_string_lossy().to_string())
+        .collect())
+}
+
+#[tauri::command]
+pub async fn get_pinned_tags_stats(
+    folder: String,
+    tags: Vec<(u16, u16)>,
+) -> Result<Vec<crate::logic::stats::TagStat>, String> {
+    let path = std::path::Path::new(&folder);
+    if !path.exists() || !path.is_dir() {
+        return Err("Invalid folder path".to_string());
+    }
+    crate::logic::stats::calculate_stats(path, tags).map_err(|e| e.to_string())
+}
