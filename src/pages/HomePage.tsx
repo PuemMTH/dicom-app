@@ -10,6 +10,7 @@ import "../App.css";
 import SelectInputFolder from "../components/SelectInputFolder";
 import SelectOutputFolder from "../components/SelectOutputFolder";
 import ExportFormatSelector, { ExportFormat } from "../components/ExportFormatSelector";
+import LogViewer, { LogEntry } from "../components/LogViewer";
 
 interface ProgressPayload {
   current: number;
@@ -64,6 +65,10 @@ export default function HomePage() {
   const [conversionReport, setConversionReport] = createSignal<ConversionReport | null>(null);
   const [anonymizationReport, setAnonymizationReport] = createSignal<AnonymizationReport | null>(null);
 
+  // Logs
+  const [logs, setLogs] = createSignal<LogEntry[]>([]);
+  const [showLogs, setShowLogs] = createSignal(false);
+
   const DialogContent = createPersistent(DialogInfomation)
 
   const setupListeners = async () => {
@@ -73,10 +78,14 @@ export default function HomePage() {
     const unlistenAnonymize = await listen<ProgressPayload>("anonymization_progress", (event) => {
       setAnonymizeProgress(event.payload);
     });
+    const unlistenLogs = await listen<LogEntry>("log_event", (event) => {
+      setLogs((prev) => [...prev, event.payload]);
+    });
 
     onCleanup(() => {
       unlistenConvert();
       unlistenAnonymize();
+      unlistenLogs();
     });
   };
 
@@ -107,6 +116,7 @@ export default function HomePage() {
     setConvertProgress(null);
     setConversionReport(null);
     setAnonymizationReport(null);
+    setLogs([]);
   };
 
   const handleProcess = async () => {
@@ -233,7 +243,7 @@ export default function HomePage() {
             <div class="flex justify-start items-end gap-4">
               <h1 class="text-4xl font-bold text-amber-500 mb-2">DICOM Anonymization Tool</h1>
             </div>
-            <div class="flex justify-end">
+            <div class="flex justify-end gap-2">
               <Dialog>
                 <Dialog.Trigger class="my-auto rounded-sm bg-corvu-100 text-2xl font-medium transition-all 
                                       duration-100 hover:bg-corvu-600 active:translate-y-0.5">
@@ -259,10 +269,12 @@ export default function HomePage() {
               <SelectInputFolder
                 path={inputPath()}
                 onSelect={selectInputFolder}
+                onPathChange={setInputPath}
               />
               <SelectOutputFolder
                 path={outputPath()}
                 onSelect={selectOutputFolder}
+                onPathChange={setOutputPath}
               />
 
               <div class="divider"></div>
@@ -272,13 +284,23 @@ export default function HomePage() {
                   selected={exportFormats()}
                   onChange={setExportFormats}
                 />
-                <button
-                  class="btn btn-primary"
-                  onClick={handleProcess}
-                  disabled={isProcessing() || !inputPath() || !outputPath()}
-                >
-                  {isProcessing() ? "Processing..." : "Start Processing"}
-                </button>
+                <div class="flex gap-2">
+                  <Show when={isProcessing() || logs().length > 0}>
+                    <button
+                      onClick={() => setShowLogs(true)}
+                      class="btn btn-ghost"
+                    >
+                      Show Logs
+                    </button>
+                  </Show>
+                  <button
+                    class="btn btn-primary"
+                    onClick={handleProcess}
+                    disabled={isProcessing() || !inputPath() || !outputPath()}
+                  >
+                    {isProcessing() ? "Processing..." : "Start Processing"}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -357,6 +379,11 @@ export default function HomePage() {
           />
         </div>
       </div>
+      <LogViewer
+        logs={logs()}
+        isOpen={showLogs()}
+        onClose={() => setShowLogs(false)}
+      />
     </div >
   )
 }

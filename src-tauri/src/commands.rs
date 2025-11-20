@@ -18,6 +18,9 @@ pub async fn convert_dicom(
         |progress| {
             let _ = app.emit("conversion_progress", progress);
         },
+        |log| {
+            let _ = app.emit("log_event", log);
+        },
     ) {
         Ok(report) => {
             // Open the output folder after conversion completes
@@ -48,9 +51,11 @@ pub async fn anonymize_dicom(
         |progress| {
             let _ = app.emit("anonymization_progress", progress);
         },
+        |log| {
+            let _ = app.emit("log_event", log);
+        },
     ) {
         Ok(report) => {
-            // Open the output folder after anonymization completes
             let _ = app.opener().open_url(
                 report.output_folder.to_string_lossy().as_ref(),
                 None::<&str>,
@@ -105,12 +110,15 @@ pub async fn process_dicom(
             |progress| {
                 let _ = app.emit("conversion_progress", progress);
             },
+            |log| {
+                let _ = app.emit("log_event", log);
+            },
         ) {
             Ok(conversion_report) => {
-                let _ = app.opener().open_url(
-                    conversion_report.output_folder.to_string_lossy().as_ref(),
-                    None::<&str>,
-                );
+                // let _ = app.opener().open_url(
+                //     conversion_report.output_folder.to_string_lossy().as_ref(),
+                //     None::<&str>,
+                // );
                 report.conversion = Some(conversion_report);
             }
             Err(e) => return Err(format!("Conversion failed: {}", e)),
@@ -127,15 +135,18 @@ pub async fn process_dicom(
             |progress| {
                 let _ = app.emit("anonymization_progress", progress);
             },
+            |log| {
+                let _ = app.emit("log_event", log);
+            },
         ) {
             Ok(anonymization_report) => {
-                let _ = app.opener().open_url(
-                    anonymization_report
-                        .output_folder
-                        .to_string_lossy()
-                        .as_ref(),
-                    None::<&str>,
-                );
+                // let _ = app.opener().open_url(
+                //     anonymization_report
+                //         .output_folder
+                //         .to_string_lossy()
+                //         .as_ref(),
+                //     None::<&str>,
+                // );
                 report.anonymization = Some(anonymization_report);
             }
             Err(e) => return Err(format!("Anonymization failed: {}", e)),
