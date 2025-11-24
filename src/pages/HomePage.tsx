@@ -1,4 +1,5 @@
 import { createSignal, onCleanup, Show } from "solid-js";
+import { A } from "@solidjs/router";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
@@ -246,8 +247,11 @@ export default function HomePage() {
         <div class="container mx-auto px-4 py-8">
           <div class=" mb-4 flex flex-row justify-between">
             {/* Header Section */}
-            <div class="flex justify-start items-end gap-4">
+            <div class="flex flex-wrap justify-start items-center gap-4">
               <h1 class="text-4xl font-bold text-amber-500 mb-2">DICOM Anonymization Tool</h1>
+              <A href="/tags" class="btn btn-sm btn-outline btn-primary mb-2">
+                DICOM Tag Viewer
+              </A>
             </div>
             <div class="flex justify-end gap-2">
               <Dialog>

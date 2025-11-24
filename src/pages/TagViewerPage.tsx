@@ -1,4 +1,5 @@
-import { Component, createSignal, Show, createEffect, For, createMemo } from "solid-js";
+import { Component, createSignal, Show, createEffect, For, createMemo, onMount } from "solid-js";
+import { makePersisted } from "@solid-primitives/storage";
 import { invoke } from "@tauri-apps/api/core";
 import { createVirtualizer } from "@tanstack/solid-virtual";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -21,7 +22,7 @@ const TagViewerPage: Component = () => {
     const [tags, setTags] = createSignal<DicomTag[]>([]);
     // const [filteredTags, setFilteredTags] = createSignal<DicomTag[]>([]); // Replaced by memo
     const [filePath, setFilePath] = createSignal<string>("");
-    const [folderPath, setFolderPath] = createSignal<string>("");
+    const [folderPath, setFolderPath] = makePersisted(createSignal<string>(""), { name: "dicom-tag-viewer-path" });
     const [fileList, setFileList] = createSignal<string[]>([]);
     const [loading, setLoading] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
@@ -47,6 +48,8 @@ const TagViewerPage: Component = () => {
     };
 
     loadPinnedTags();
+
+
 
     // Save pinned tags to local storage whenever they change
     createEffect(() => {
@@ -199,6 +202,12 @@ const TagViewerPage: Component = () => {
             setLoading(false);
         }
     };
+
+    onMount(() => {
+        if (folderPath()) {
+            loadFileList(folderPath());
+        }
+    });
 
     return (
         <div
