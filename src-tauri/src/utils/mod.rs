@@ -1,3 +1,3 @@
 pub mod discovery;
-pub mod excel;
 pub mod logging;
+pub mod metadata_export;

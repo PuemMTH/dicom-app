@@ -1,8 +1,8 @@
 use crate::logic::convert::{convert_single_file, FileOutcome};
 use crate::models::metadata::FileMetadata;
 use crate::utils::discovery::collect_dicom_files;
-use crate::utils::excel::write_metadata_workbooks;
 use crate::utils::logging::{write_logs, LogEntry};
+use crate::utils::metadata_export::write_metadata_report;
 use anyhow::{bail, Context, Result};
 use owo_colors::OwoColorize;
 use rayon::prelude::*;
@@ -280,8 +280,8 @@ where
     }
 
     if save_excel {
-        write_metadata_workbooks(&all_metadata, &folder_metadata, &png_output_path)
-            .context("Unable to write Excel metadata files")?;
+        write_metadata_report(&all_metadata, &png_output_path)
+            .context("Unable to write metadata report")?;
     }
 
     // Write logs

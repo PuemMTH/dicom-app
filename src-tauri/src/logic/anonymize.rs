@@ -1,7 +1,7 @@
 use crate::models::metadata::FileMetadata;
 use crate::utils::discovery::collect_dicom_files;
-use crate::utils::excel::write_metadata_workbooks;
 use crate::utils::logging::{write_logs, LogEntry};
+use crate::utils::metadata_export::write_metadata_report;
 use anyhow::{bail, Context, Result};
 use dicom::core::{DataElement, PrimitiveValue, Tag, VR};
 use dicom::object::open_file;
@@ -253,8 +253,8 @@ where
     }
 
     // Write metadata report
-    write_metadata_workbooks(&all_metadata, &folder_metadata, &dicom_output_path)
-        .context("Unable to write Excel metadata files")?;
+    write_metadata_report(&all_metadata, &dicom_output_path)
+        .context("Unable to write metadata report")?;
 
     // Write logs
     write_logs(&root_output_path, &logs).context("Unable to write logs")?;
