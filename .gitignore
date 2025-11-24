@@ -2,3 +2,4 @@ node_modules
 dist
 dicom-converter
 src-tauri/src/original_file/
+yarn.lock

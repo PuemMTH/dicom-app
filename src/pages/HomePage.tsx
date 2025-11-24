@@ -58,6 +58,12 @@ export default function HomePage() {
 
   // Configuration (Hidden/Default)
   const tagsInput = "0010,0010; 0010,0020; 0010,0030; 0008,0080; 0008,0090";
+  // Comment tags
+  // 0010,0010 = PatientName
+  // 0010,0020 = PatientID
+  // 0010,0030 = PatientBirthDate
+  // 0008,0080 = InstitutionName
+  // 0008,0090 = ReferringPhysicianName
   const replacementValue = "ANONYMIZED";
   const skipExcel = false;
 
@@ -253,9 +259,10 @@ export default function HomePage() {
                   <Dialog.Overlay class="fixed inset-0 z-50 bg-black/50 data-open:animate-in 
                                         data-open:fade-in-0% data-closed:animate-out data-closed:fade-out-0%" />
                   <Dialog.Content class="fixed left-1/2 top-1/2 z-50 max-w-125 -translate-x-1/2 
-                                        -translate-y-1/2 rounded-lg border-2 border-white bg-black px-6 py-5 
-                                        data-open:animate-in data-open:fade-in-0% data-open:zoom-in-95% data-open:slide-in-from-top-10% 
-                                        data-closed:animate-out data-closed:fade-out-0% data-closed:zoom-out-95% data-closed:slide-out-to-top-10%">
+                                        -translate-y-1/2 rounded-lg border-2 border-white dark:border-gray-600 bg-white dark:bg-gray-800 
+                                      text-black dark:text-white px-6 py-5 data-open:animate-in data-open:fade-in-0% data-open:zoom-in-95% 
+                                        data-open:slide-in-from-top-10% data-closed:animate-out data-closed:fade-out-0% data-closed:zoom-out-95% 
+                                        data-closed:slide-out-to-top-10%">
                     {DialogContent()}
                   </Dialog.Content>
                 </Dialog.Portal>
