@@ -19,6 +19,7 @@ const StatsModal: Component<StatsModalProps> = (props) => {
     const [stats, setStats] = createSignal<TagStat[]>([]);
     const [loading, setLoading] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
+    const [progress, setProgress] = createSignal<{ current: number; total: number } | null>(null);
 
     // Fetch stats when the modal opens
     const fetchStats = async () => {
@@ -26,6 +27,15 @@ const StatsModal: Component<StatsModalProps> = (props) => {
 
         setLoading(true);
         setError(null);
+        setProgress(null);
+
+        // Listen for progress
+        const unlisten = await import("@tauri-apps/api/event").then(mod =>
+            mod.listen<{ current: number; total: number }>("stats_progress", (event) => {
+                setProgress(event.payload);
+            })
+        );
+
         try {
             const result = await invoke<TagStat[]>("get_pinned_tags_stats", {
                 folder: props.folderPath,
@@ -35,7 +45,9 @@ const StatsModal: Component<StatsModalProps> = (props) => {
         } catch (err) {
             setError(err as string);
         } finally {
+            unlisten();
             setLoading(false);
+            setProgress(null);
         }
     };
 
@@ -58,8 +70,21 @@ const StatsModal: Component<StatsModalProps> = (props) => {
 
                 <div class="flex-1 overflow-y-auto">
                     <Show when={loading()}>
-                        <div class="flex justify-center items-center h-full">
+                        <div class="flex flex-col justify-center items-center h-full space-y-4">
                             <span class="loading loading-spinner loading-lg"></span>
+                            <Show when={progress()}>
+                                <div class="flex flex-col items-center w-full max-w-md">
+                                    <div class="flex justify-between w-full text-sm mb-1">
+                                        <span>Calculating stats...</span>
+                                        <span>{progress()?.current} / {progress()?.total}</span>
+                                    </div>
+                                    <progress
+                                        class="progress progress-primary w-full"
+                                        value={progress()?.current}
+                                        max={progress()?.total}
+                                    ></progress>
+                                </div>
+                            </Show>
                         </div>
                     </Show>
 

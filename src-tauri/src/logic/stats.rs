@@ -7,6 +7,7 @@ use rayon::prelude::*;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[derive(Debug, Serialize)]
 pub struct TagStat {
@@ -16,8 +17,23 @@ pub struct TagStat {
     pub value_counts: HashMap<String, usize>,
 }
 
-pub fn calculate_stats(folder: &Path, tags: Vec<(u16, u16)>) -> Result<Vec<TagStat>> {
+#[derive(Clone, Serialize)]
+pub struct StatsProgress {
+    pub current: usize,
+    pub total: usize,
+}
+
+pub fn calculate_stats<F>(
+    folder: &Path,
+    tags: Vec<(u16, u16)>,
+    progress_callback: F,
+) -> Result<Vec<TagStat>>
+where
+    F: Fn(StatsProgress) + Sync + Send,
+{
     let files = collect_dicom_files(folder);
+    let total = files.len();
+    let processed_count = AtomicUsize::new(0);
 
     // Map to store aggregated counts: (group, element) -> HashMap<Value, Count>
     // We use a Mutex to allow safe concurrent updates, or we can reduce.
@@ -28,15 +44,20 @@ pub fn calculate_stats(folder: &Path, tags: Vec<(u16, u16)>) -> Result<Vec<TagSt
         .fold(
             || HashMap::new(),
             |mut acc: HashMap<(u16, u16), HashMap<String, usize>>, file_path| {
+                let current = processed_count.fetch_add(1, Ordering::Relaxed) + 1;
+                if current % 10 == 0 || current == total {
+                    progress_callback(StatsProgress { current, total });
+                }
+
                 if let Ok(obj) = open_file(file_path) {
                     for &(group, element) in &tags {
                         let tag = Tag(group, element);
-                        let value = if let Ok(elem) = obj.element(tag) {
-                            if let Ok(v) = elem.to_str() {
-                                v.to_string()
-                            } else {
-                                "<binary/unknown>".to_string()
-                            }
+                        let value = if let Ok(_elem) = obj.element(tag) {
+                            // if let Ok(v) = elem.to_str() {
+                            "<binary/unknown>".to_string()
+                            // } else {
+                            // "<binary/unknown>".to_string()
+                            // }
                         } else {
                             "<missing>".to_string()
                         };
@@ -48,6 +69,7 @@ pub fn calculate_stats(folder: &Path, tags: Vec<(u16, u16)>) -> Result<Vec<TagSt
                             .or_insert(1);
                     }
                 }
+
                 acc
             },
         )

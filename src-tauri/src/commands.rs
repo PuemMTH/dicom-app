@@ -182,6 +182,7 @@ pub async fn list_dicom_files(folder: String) -> Result<Vec<String>, String> {
 
 #[tauri::command]
 pub async fn get_pinned_tags_stats(
+    app: AppHandle,
     folder: String,
     tags: Vec<(u16, u16)>,
 ) -> Result<Vec<crate::logic::stats::TagStat>, String> {
@@ -189,5 +190,8 @@ pub async fn get_pinned_tags_stats(
     if !path.exists() || !path.is_dir() {
         return Err("Invalid folder path".to_string());
     }
-    crate::logic::stats::calculate_stats(path, tags).map_err(|e| e.to_string())
+    crate::logic::stats::calculate_stats(path, tags, |progress| {
+        let _ = app.emit("stats_progress", progress);
+    })
+    .map_err(|e| e.to_string())
 }
