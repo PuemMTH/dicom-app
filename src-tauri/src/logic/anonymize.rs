@@ -1,6 +1,7 @@
 use crate::models::metadata::FileMetadata;
 use crate::utils::discovery::collect_dicom_files;
 use crate::utils::excel::write_metadata_workbooks;
+use crate::utils::logging::{write_logs, LogEntry};
 use anyhow::{bail, Context, Result};
 use dicom::core::{DataElement, PrimitiveValue, Tag, VR};
 use dicom::object::open_file;
@@ -32,15 +33,17 @@ pub struct ProgressPayload {
     pub status: String,
 }
 
-pub fn anonymize_dicom<F>(
+pub fn anonymize_dicom<F, G>(
     input_folder: &Path,
     output_folder: &Path,
     tags_to_anonymize: Vec<(u16, u16)>, // Group, Element
     replacement_value: String,
     progress_callback: F,
+    log_callback: G,
 ) -> Result<AnonymizationReport>
 where
     F: Fn(ProgressPayload) + Sync + Send,
+    G: Fn(LogEntry) + Sync + Send,
 {
     if !input_folder.exists() {
         bail!("Input folder '{}' does not exist", input_folder.display());
@@ -154,6 +157,7 @@ where
     let mut skipped_files = Vec::new();
     let mut all_metadata = Vec::new();
     let mut folder_metadata: BTreeMap<PathBuf, Vec<FileMetadata>> = BTreeMap::new();
+    let mut logs: Vec<LogEntry> = Vec::new();
 
     for (dicom_path, outcome, folder_relative) in results {
         let mut register_metadata = |mut metadata: FileMetadata| {
@@ -169,6 +173,20 @@ where
             Ok(AnonymizeOutcome::Success(metadata)) => {
                 register_metadata(metadata);
                 successful += 1;
+                let entry = LogEntry {
+                    file_name: dicom_path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("unknown")
+                        .to_string(),
+                    file_path: dicom_path.to_string_lossy().to_string(),
+                    success: true,
+                    status: "Success".to_string(),
+                    message: "Anonymized successfully".to_string(),
+                    conversion_type: "ANONYMIZE".to_string(),
+                };
+                log_callback(entry.clone());
+                logs.push(entry);
             }
             Ok(AnonymizeOutcome::Skipped(metadata_opt)) => {
                 if let Some(metadata) = metadata_opt {
@@ -187,6 +205,20 @@ where
                     "∙".cyan(),
                     dicom_path.display()
                 );
+                let entry = LogEntry {
+                    file_name: dicom_path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("unknown")
+                        .to_string(),
+                    file_path: dicom_path.to_string_lossy().to_string(),
+                    success: true,
+                    status: "Skipped".to_string(),
+                    message: "Output file already exists".to_string(),
+                    conversion_type: "ANONYMIZE".to_string(),
+                };
+                log_callback(entry.clone());
+                logs.push(entry);
             }
             Err(err) => {
                 eprintln!(
@@ -202,6 +234,20 @@ where
                         .map(String::from)
                         .unwrap_or_else(|| dicom_path.to_string_lossy().to_string()),
                 );
+                let entry = LogEntry {
+                    file_name: dicom_path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("unknown")
+                        .to_string(),
+                    file_path: dicom_path.to_string_lossy().to_string(),
+                    success: false,
+                    status: "Failed".to_string(),
+                    message: err.to_string(),
+                    conversion_type: "ANONYMIZE".to_string(),
+                };
+                log_callback(entry.clone());
+                logs.push(entry);
             }
         }
     }
@@ -209,6 +255,9 @@ where
     // Write metadata report
     write_metadata_workbooks(&all_metadata, &folder_metadata, &dicom_output_path)
         .context("Unable to write Excel metadata files")?;
+
+    // Write logs
+    write_logs(&root_output_path, &logs).context("Unable to write logs")?;
 
     Ok(AnonymizationReport {
         total,

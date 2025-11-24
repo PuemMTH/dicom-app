@@ -30,9 +30,9 @@ pub fn convert_single_file(dicom_path: &Path, png_path: &Path) -> Result<FileOut
             .clone()
             .unwrap_or_else(|| "Unknown".to_string());
         let sop_class = dicom_text(&obj, Tag(0x0008, 0x0016)).unwrap_or_else(|| "Unknown".into());
-        return Ok(FileOutcome::Skipped {
+        return Ok(FileOutcome::Failed {
             metadata,
-            reason: format!("no pixel data (Modality={modality}, SOPClass={sop_class})"),
+            error: anyhow::anyhow!("no pixel data (Modality={modality}, SOPClass={sop_class})"),
         });
     }
 

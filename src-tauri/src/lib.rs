@@ -15,7 +15,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             convert_dicom,
             anonymize_dicom,
-            process_dicom
+            process_dicom,
+            commands::get_dicom_tags,
+            commands::list_dicom_files,
+            commands::get_pinned_tags_stats
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
