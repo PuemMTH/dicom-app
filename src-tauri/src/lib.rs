@@ -2,6 +2,7 @@
 use crate::commands::{anonymize_dicom, convert_dicom, process_dicom};
 
 // Modules
+pub mod cli;
 mod commands;
 pub mod logic;
 pub mod models;
