@@ -44,6 +44,14 @@ const TagViewerPage: Component = () => {
             } catch (e) {
                 console.error("Failed to parse pinned tags", e);
             }
+        } else {
+            setPinnedTags([
+                { group: 0x0010, element: 0x0010 },
+                { group: 0x0010, element: 0x0020 },
+                { group: 0x0010, element: 0x0030 },
+                { group: 0x0008, element: 0x0080 },
+                { group: 0x0008, element: 0x0090 },
+            ]);
         }
     };
 
