@@ -1,18 +1,20 @@
 # DICOM Converter App
 
-DICOM file processing application built with Tauri + Solid + TypeScript
+A high-performance DICOM processing application built with **Tauri v2**, **SolidJS**, and **Rust**.
 
-## Features
+## 🚀 Features
 
-- **DICOM to PNG Conversion**: Convert DICOM medical images to PNG format
-- **Folder Structure Preservation**: Maintains original folder hierarchy in output
-- **Batch Processing**: Process multiple DICOM files at once
-- **Detailed Statistics**: Track successful/failed conversions with error details
-- **Python-Compatible Output**: Output structure matches Python dicom-converter format
+- **Dual Mode**: Run as a modern GUI application or a headless CLI tool.
+- **High Performance**: Utilizes multi-threaded processing (Rayon) for fast conversion and anonymization.
+- **Incremental Saving**: Writes metadata and logs to disk immediately as files are processed, preventing data loss.
+- **DICOM to PNG**: High-quality conversion preserving 16-bit depth information where applicable.
+- **Anonymization**: robust de-identification of sensitive patient data with customizable tag replacement.
+- **Smart Skipping**: Automatically skips already processed files to resume interrupted jobs efficiently.
+- **Detailed Reporting**: Generates comprehensive CSV reports (`metadata_all.csv`, `logs.csv`) and JSON summaries.
 
-## Architecture
+## 🏗️ Architecture
 
-The application follows a client-server architecture using Tauri's IPC protocol to communicate between the SolidJS frontend and the Rust backend.
+The application follows a client-server architecture using Tauri's IPC protocol.
 
 ```mermaid
 graph TD
@@ -31,6 +33,23 @@ graph TD
             Anonymize["anonymize.rs"]
             Convert["convert.rs"]
         end
+
+        subgraph ParallelProcessing ["Parallel Processing (Rayon)"]
+            Worker["Worker Threads"]
+            Channel["MPSC Channel"]
+        end
+
+        subgraph WriterThread ["Writer Thread"]
+            WriterLogic["Result Collector"]
+            MetaWriter["MetadataWriter"]
+            LogWriter["LogWriter"]
+        end
+
+        subgraph IO ["Disk I/O"]
+            Files["Output Files (PNG/DICOM)"]
+            CSV["metadata_all.csv"]
+            Logs["logs.csv"]
+        end
     end
 
     %% User Interaction
@@ -43,93 +62,45 @@ graph TD
     %% Backend Processing
     Command -->|"If Convert"| Workflow
     Command -->|"If Anonymize"| Anonymize
-    Workflow --> Convert
+    
+    Workflow -->|"Spawn"| Worker
+    Anonymize -->|"Spawn"| Worker
+    
+    Worker -->|"Convert Single File"| Convert
+    Worker -->|"Write File"| Files
+
+    %% Incremental Saving Flow
+    Workflow -->|"Spawn"| WriterLogic
+    Anonymize -->|"Spawn"| WriterLogic
+    
+    Worker --"Send Result"--> Channel
+    Channel --"Receive Result"--> WriterLogic
+    
+    WriterLogic -->|"Write Record"| MetaWriter
+    WriterLogic -->|"Write Entry"| LogWriter
+    
+    MetaWriter -->|"Append"| CSV
+    LogWriter -->|"Append"| Logs
 
     %% Progress Reporting
-    Workflow -.->|"emit('conversion_progress')"| Listener
-    Anonymize -.->|"emit('anonymization_progress')"| Listener
+    Worker -.->|"Callback"| Command
+    Command -.->|"emit('progress')"| Listener
 
     %% Feedback Loop
     Listener -->|"Update UI"| Page
 ```
 
-### Communication Protocol
-- **Protocol**: Tauri IPC (Inter-Process Communication)
-- **Command**: `process_dicom`
-  - **Input**: `DicomProcessInput` (JSON) containing paths and configuration for conversion/anonymization.
-  - **Output**: `ProcessReport` (JSON) containing success/failure statistics.
-- **Events**:
-  - `conversion_progress`: Real-time updates during PNG conversion.
-  - `anonymization_progress`: Real-time updates during DICOM anonymization.
+## 🛠️ Development
 
-## Development
-
-### If using VSCode and encountering bugs:
+### Running Locally
 
 ```bash
-export GTK_PATH=""
-export GIO_MODULE_DIR=""
+# Install frontend dependencies
+npm install
+
+# Run in development mode (GUI)
 npm run tauri dev
-```
 
-## Build
-
-```bash
-npm run tauri build
-```
-
-## CLI Usage
-
-The application also supports a Command Line Interface (CLI) for automation and headless operation.
-
-### Running CLI
-
-You can run the CLI using the built binary or via `cargo run` during development.
-
-#### Convert DICOM to PNG
-```bash
-# Development
-cargo run -- convert --input <INPUT_FOLDER> --output <OUTPUT_FOLDER> [--skip-excel] [--flatten-output]
-
-# Production Binary
-./dicom-app convert --input <INPUT_FOLDER> --output <OUTPUT_FOLDER>
-```
-
-**Note on `--flatten-output`:**
-
-By default, the converter creates a subfolder named `<INPUT_FOLDER_NAME>_output` inside your specified output directory.
-Using `--flatten-output` removes this extra nesting level.
-
-**Default behavior:**
-```
-output_folder/
-  └── dicom_input_output/
-      ├── png_file/
-      │   ├── image1.png
-      │   └── ...
-      └── metadata.xlsx
-```
-
-**With `--flatten-output`:**
-```
-output_folder/
-  ├── png_file/
-  │   ├── image1.png
-  │   └── ...
-  └── metadata.xlsx
-```
-
-#### Anonymize DICOM
-```bash
-# Development
-cargo run -- anonymize --input <INPUT_FOLDER> --output <OUTPUT_FOLDER> --tags "0010,0010" --tags "0010,0020" --replacement "ANONYMIZED"
-
-# Production Binary
-./dicom-app anonymize --input <INPUT_FOLDER> --output <OUTPUT_FOLDER> --tags "0010,0010" --replacement "xxx"
-```
-
-### Help
-To see all available commands and options:
-```bash
-./dicom-app --help
+# Run CLI in development mode
+cargo run -- --help
 ```

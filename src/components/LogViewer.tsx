@@ -87,7 +87,7 @@ const LogViewer: Component<LogViewerProps> = (props) => {
                                     >
                                         <div class="col-span-2">
                                             <div class={`badge ${getStatusColor(log.status)} gap-2 text-white badge-sm`}>
-                                                {log.status || (log.success ? "Success" : "Failed")}
+                                                {log.status == "Skipped" ? "Already exists" : log.success ? "Success" : "Failed"}
                                             </div>
                                         </div>
                                         <div class="col-span-1 truncate" title={log.conversion_type}>{log.conversion_type}</div>
