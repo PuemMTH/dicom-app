@@ -6,6 +6,7 @@ import { useNavigate } from "@solidjs/router";
 import HomePage from "./pages/HomePage";
 import LogsPage from "./pages/LogsPage";
 import TagViewerPage from "./pages/TagViewerPage";
+import TagViewerDetailsPage from "./pages/TagViewerDetailsPage";
 
 const App = (props: any) => {
     const navigate = useNavigate();
@@ -34,6 +35,7 @@ render(
             <Route path="/" component={HomePage} />
             <Route path="/logs" component={LogsPage} />
             <Route path="/tags" component={TagViewerPage} />
+            <Route path="/tags/:group/:element" component={TagViewerDetailsPage} />
         </Router>
     ),
     document.getElementById("root") as HTMLElement

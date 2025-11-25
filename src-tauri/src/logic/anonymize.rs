@@ -349,6 +349,7 @@ fn extract_metadata(obj: &FileDicomObject<InMemDicomObject>, path: &Path) -> Res
         study_description: get_str(Tag(0x0008, 0x1030)),
         series_description: get_str(Tag(0x0008, 0x103E)),
         institution_name: get_str(Tag(0x0008, 0x0080)),
+        pixel_data: Some(crate::models::metadata::extract_pixel_data_status(&obj)),
         im_width: get_u32(Tag(0x0028, 0x0011)),  // Columns
         im_height: get_u32(Tag(0x0028, 0x0010)), // Rows
         pixel_spacing: get_str(Tag(0x0028, 0x0030)),

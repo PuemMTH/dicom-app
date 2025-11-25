@@ -13,6 +13,7 @@ pub struct FileMetadata {
     pub study_description: Option<String>,
     pub series_description: Option<String>,
     pub institution_name: Option<String>,
+    pub pixel_data: Option<String>,
     pub im_width: Option<u32>,
     pub im_height: Option<u32>,
     pub pixel_spacing: Option<String>,
@@ -39,4 +40,19 @@ pub fn dicom_date(obj: &DefaultDicomObject, tag: Tag) -> Option<String> {
 
 pub fn pixel_spacing(obj: &DefaultDicomObject) -> Option<String> {
     dicom_text(obj, Tag(0x0028, 0x0030)).map(|raw| raw.replace('\\', ", "))
+}
+
+pub fn extract_pixel_data_status(obj: &DefaultDicomObject) -> String {
+    use dicom_pixeldata::PixelDecoder;
+    if obj.element(Tag(0x7FE0, 0x0010)).is_err() {
+        "Missing".to_string()
+    } else {
+        match obj.decode_pixel_data() {
+            Ok(data) => match data.to_dynamic_image(0) {
+                Ok(_) => "Binary".to_string(),
+                Err(_) => "Error".to_string(),
+            },
+            Err(_) => "Error".to_string(),
+        }
+    }
 }

@@ -102,8 +102,15 @@ pub fn extract_metadata(dicom_path: &Path) -> Result<FileMetadata> {
         study_description: dicom_text(&obj, Tag(0x0008, 0x1030)),
         series_description: dicom_text(&obj, Tag(0x0008, 0x103E)),
         institution_name: dicom_text(&obj, Tag(0x0008, 0x0080)),
-        im_width: None,
-        im_height: None,
+        pixel_data: Some(crate::models::metadata::extract_pixel_data_status(&obj)),
+        im_width: obj
+            .element(Tag(0x0028, 0x0011))
+            .ok()
+            .and_then(|e| e.to_int().ok()),
+        im_height: obj
+            .element(Tag(0x0028, 0x0010))
+            .ok()
+            .and_then(|e| e.to_int().ok()),
         pixel_spacing: pixel_spacing(&obj),
     })
 }

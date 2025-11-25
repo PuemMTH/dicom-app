@@ -27,7 +27,12 @@ pub fn read_all_tags(path: &Path) -> Result<Vec<DicomTag>> {
             .unwrap_or_else(|| "Unknown".to_string());
 
         let value = if let Ok(v) = element.to_str() {
-            v.to_string()
+            // if tag PixelData then skip 7FE0,0010
+            if (tag.0, tag.1) == (0x7fe0, 0x0010) {
+                "<binary data>".to_string()
+            } else {
+                v.to_string()
+            }
         } else {
             "<binary data>".to_string()
         };

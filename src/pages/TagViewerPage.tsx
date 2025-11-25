@@ -1,4 +1,6 @@
-import { Component, createSignal, Show, createEffect, For, createMemo } from "solid-js";
+import { Component, createSignal, Show, createEffect, For, createMemo, onMount } from "solid-js";
+import { makePersisted } from "@solid-primitives/storage";
+import { A } from "@solidjs/router";
 import { invoke } from "@tauri-apps/api/core";
 import { createVirtualizer } from "@tanstack/solid-virtual";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -21,10 +23,11 @@ const TagViewerPage: Component = () => {
     const [tags, setTags] = createSignal<DicomTag[]>([]);
     // const [filteredTags, setFilteredTags] = createSignal<DicomTag[]>([]); // Replaced by memo
     const [filePath, setFilePath] = createSignal<string>("");
-    const [folderPath, setFolderPath] = createSignal<string>("");
+    const [folderPath, setFolderPath] = makePersisted(createSignal<string>(""), { name: "dicom-tag-viewer-path" });
     const [fileList, setFileList] = createSignal<string[]>([]);
     const [loading, setLoading] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
+    const [fileFilterText, setFileFilterText] = createSignal("");
     const [filterText, setFilterText] = createSignal("");
     const [pinnedTags, setPinnedTags] = createSignal<PinnedTag[]>([]);
     const [isDragging, setIsDragging] = createSignal(false);
@@ -43,6 +46,14 @@ const TagViewerPage: Component = () => {
             } catch (e) {
                 console.error("Failed to parse pinned tags", e);
             }
+        } else {
+            setPinnedTags([
+                { group: 0x0010, element: 0x0010 },
+                { group: 0x0010, element: 0x0020 },
+                { group: 0x0010, element: 0x0030 },
+                { group: 0x0008, element: 0x0080 },
+                { group: 0x0008, element: 0x0090 },
+            ]);
         }
     };
 
@@ -174,10 +185,10 @@ const TagViewerPage: Component = () => {
             setFileList(files);
             setCurrentPage(1); // Reset to first page on new folder load
             // Removed auto-loading of the first file
-            // if (files.length > 0) {
-            //     setFilePath(files[0]);
-            //     loadTags(files[0]);
-            // }
+            if (files.length > 0) {
+                setFilePath(files[0]);
+                loadTags(files[0]);
+            }
         } catch (err) {
             setError(err as string);
         } finally {
@@ -200,47 +211,86 @@ const TagViewerPage: Component = () => {
         }
     };
 
+    const filteredFileList = createMemo(() => {
+        const filter = fileFilterText().toLowerCase();
+        if (!filter) return fileList();
+        return fileList().filter(file => file.toLowerCase().includes(filter));
+    });
+
+    // Reset page when filter changes
+    createEffect(() => {
+        fileFilterText();
+        setCurrentPage(1);
+    });
+
+    onMount(() => {
+        if (folderPath()) {
+            loadFileList(folderPath());
+        }
+    });
+
     return (
         <div
-            class="h-screen flex flex-col bg-base-100"
+            class={`h-screen flex flex-col bg-base-100 ${isDragging() ? "outline outline-4 outline-primary outline-offset-[-4px]" : ""}`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
         >
             {/* Header */}
-            <div class="flex items-center justify-between p-4 border-b border-base-300 bg-base-200">
-                <div class="flex items-center gap-4">
-                    <h1 class="text-2xl font-bold">DICOM Tag Viewer</h1>
-                    <button class="btn btn-sm btn-outline" onClick={openFolder}>
-                        Open Folder
-                    </button>
-                    <Show when={folderPath() && pinnedTags().length > 0}>
-                        <button class="btn btn-sm btn-primary" onClick={() => setShowStats(true)}>
-                            View Stats
+            <div class="flex flex-col border-b border-base-300 bg-base-100 shadow-sm z-20">
+                <div class="navbar min-h-[3.5rem] px-4 gap-4">
+                    <div class="flex-none">
+                        <A href="/" class="btn btn-square btn-ghost btn-sm" title="Back to Home">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+                            </svg>
+                        </A>
+                    </div>
+                    <div class="flex-1 items-center gap-2 overflow-hidden">
+                        <h1 class="text-lg font-bold truncate text-base-content">DICOM Tag Viewer</h1>
+                        <Show when={folderPath()}>
+                            <span class="text-base-content/30 hidden sm:inline">/</span>
+                            <span class="text-xs text-base-content/50 truncate font-mono hidden sm:inline" title={folderPath()}>{folderPath()}</span>
+                        </Show>
+                    </div>
+                    <div class="flex-none gap-2">
+                        <Show when={folderPath() && pinnedTags().length > 0}>
+                            <button class="btn btn-sm btn-ghost text-primary" onClick={() => setShowStats(true)}>
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 mr-1">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5m.75-9l3-3 2.148 2.148A12.061 12.061 0 0116.5 7.605" />
+                                </svg>
+                                Stats
+                            </button>
+                        </Show>
+                        <button class="btn btn-sm btn-primary" onClick={openFolder}>
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 mr-1">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+                            </svg>
+                            Open Folder
                         </button>
-                    </Show>
+                    </div>
                 </div>
-                <div class="flex items-center gap-4">
-                    <input
-                        type="text"
-                        placeholder="Filter tags..."
-                        class="input input-sm input-bordered w-64"
-                        value={filterText()}
-                        onInput={(e) => setFilterText(e.currentTarget.value)}
-                    />
-                    <a href="/" class="btn btn-sm">Back to Home</a>
-                </div>
+                <Show when={loading()}>
+                    <progress class="progress progress-primary w-full h-0.5 rounded-none absolute bottom-0 left-0"></progress>
+                </Show>
             </div>
 
             <div class="flex flex-1 overflow-hidden">
                 {/* Sidebar */}
                 <Show when={fileList().length > 0}>
                     <div class="w-64 border-r border-base-300 bg-base-100 flex flex-col">
-                        <div class="p-2 font-bold text-sm bg-base-200 border-b border-base-300">
-                            Files ({fileList().length})
+                        <div class="p-2 font-bold text-sm bg-base-200 border-b border-base-300 flex flex-col gap-2">
+                            <div>Files ({filteredFileList().length})</div>
+                            <input
+                                type="text"
+                                placeholder="Search files..."
+                                class="input input-xs input-bordered w-full"
+                                value={fileFilterText()}
+                                onInput={(e) => setFileFilterText(e.currentTarget.value)}
+                            />
                         </div>
                         <div class="flex-1 overflow-y-auto p-2">
-                            <For each={fileList().slice((currentPage() - 1) * itemsPerPage, currentPage() * itemsPerPage)}>
+                            <For each={filteredFileList().slice((currentPage() - 1) * itemsPerPage, currentPage() * itemsPerPage)}>
                                 {(file) => (
                                     <div
                                         class={`p-2 text-xs cursor-pointer rounded hover:bg-base-200 truncate ${filePath() === file ? "bg-primary text-primary-content" : ""}`}
@@ -264,12 +314,12 @@ const TagViewerPage: Component = () => {
                                 «
                             </button>
                             <span class="text-xs">
-                                {currentPage()} / {Math.ceil(fileList().length / itemsPerPage)}
+                                {currentPage()} / {Math.ceil(filteredFileList().length / itemsPerPage)}
                             </span>
                             <button
                                 class="btn btn-xs btn-ghost"
-                                disabled={currentPage() >= Math.ceil(fileList().length / itemsPerPage)}
-                                onClick={() => setCurrentPage(p => Math.min(Math.ceil(fileList().length / itemsPerPage), p + 1))}
+                                disabled={currentPage() >= Math.ceil(filteredFileList().length / itemsPerPage)}
+                                onClick={() => setCurrentPage(p => Math.min(Math.ceil(filteredFileList().length / itemsPerPage), p + 1))}
                             >
                                 »
                             </button>
@@ -294,6 +344,15 @@ const TagViewerPage: Component = () => {
                     </Show>
 
                     <div class="flex-1 border border-base-300 rounded-lg overflow-hidden flex flex-col bg-base-100 shadow-sm">
+                        <div class="p-2 bg-base-200 border-b border-base-300">
+                            <input
+                                type="text"
+                                placeholder="Filter tags by name, value, or group/element..."
+                                class="input input-sm input-bordered w-full"
+                                value={filterText()}
+                                onInput={(e) => setFilterText(e.currentTarget.value)}
+                            />
+                        </div>
                         <div class="grid grid-cols-12 gap-4 p-2 font-bold bg-base-200 border-b border-base-300 text-sm">
                             <div class="col-span-1 text-center">Pin</div>
                             <div class="col-span-2">Tag</div>
@@ -342,7 +401,8 @@ const TagViewerPage: Component = () => {
                                                 class="col-span-5 truncate font-mono text-xs"
                                                 title={tag.value.length > 20 ? tag.value : tag.value.slice(0, 20) + "..."}
                                             >
-                                                {tag.value.length > 20 ? tag.value.slice(0, 20) + "..." : tag.value}
+                                                {/* {tag.value.length > 20 ? tag.value.slice(0, 20) + "..." : tag.value} */}
+                                                {tag.value}
                                             </div>
                                         </div>
                                     );
@@ -351,7 +411,7 @@ const TagViewerPage: Component = () => {
                         </div>
                     </div>
                 </div>
-            </div>
+            </div >
 
             <Show when={showStats()}>
                 <StatsModal
@@ -361,7 +421,7 @@ const TagViewerPage: Component = () => {
                     pinnedTags={pinnedTags()}
                 />
             </Show>
-        </div>
+        </div >
     );
 };
 

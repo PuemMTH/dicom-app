@@ -1,5 +1,6 @@
 import { Component, createSignal, Show, For, onMount } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+import { A } from "@solidjs/router";
 
 interface TagStat {
     group: number;
@@ -19,6 +20,7 @@ const StatsModal: Component<StatsModalProps> = (props) => {
     const [stats, setStats] = createSignal<TagStat[]>([]);
     const [loading, setLoading] = createSignal(false);
     const [error, setError] = createSignal<string | null>(null);
+    const [progress, setProgress] = createSignal<{ current: number; total: number } | null>(null);
 
     // Fetch stats when the modal opens
     const fetchStats = async () => {
@@ -26,6 +28,15 @@ const StatsModal: Component<StatsModalProps> = (props) => {
 
         setLoading(true);
         setError(null);
+        setProgress(null);
+
+        // Listen for progress
+        const unlisten = await import("@tauri-apps/api/event").then(mod =>
+            mod.listen<{ current: number; total: number }>("stats_progress", (event) => {
+                setProgress(event.payload);
+            })
+        );
+
         try {
             const result = await invoke<TagStat[]>("get_pinned_tags_stats", {
                 folder: props.folderPath,
@@ -35,7 +46,9 @@ const StatsModal: Component<StatsModalProps> = (props) => {
         } catch (err) {
             setError(err as string);
         } finally {
+            unlisten();
             setLoading(false);
+            setProgress(null);
         }
     };
 
@@ -58,8 +71,21 @@ const StatsModal: Component<StatsModalProps> = (props) => {
 
                 <div class="flex-1 overflow-y-auto">
                     <Show when={loading()}>
-                        <div class="flex justify-center items-center h-full">
+                        <div class="flex flex-col justify-center items-center h-full space-y-4">
                             <span class="loading loading-spinner loading-lg"></span>
+                            <Show when={progress()}>
+                                <div class="flex flex-col items-center w-full max-w-md">
+                                    <div class="flex justify-between w-full text-sm mb-1">
+                                        <span>Calculating stats...</span>
+                                        <span>{progress()?.current} / {progress()?.total}</span>
+                                    </div>
+                                    <progress
+                                        class="progress progress-primary w-full"
+                                        value={progress()?.current}
+                                        max={progress()?.total}
+                                    ></progress>
+                                </div>
+                            </Show>
                         </div>
                     </Show>
 
@@ -79,6 +105,15 @@ const StatsModal: Component<StatsModalProps> = (props) => {
                                                 {stat.name}
                                                 <span class="text-xs font-mono opacity-50">
                                                     ({stat.group.toString(16).padStart(4, "0").toUpperCase()},{stat.element.toString(16).padStart(4, "0").toUpperCase()})
+                                                </span>
+
+                                                <span class="text-xs opacity-50 ml-auto text-primary">
+                                                    <A
+                                                        class="link link-hover text-xs ml-auto"
+                                                        href={`/tags/${stat.group}/${stat.element}`}
+                                                    >
+                                                        Click for details
+                                                    </A>
                                                 </span>
                                             </h4>
 
