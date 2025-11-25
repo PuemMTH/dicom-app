@@ -411,7 +411,7 @@ const DialogInfomation = () => (
       <br />- Institution Name
       <br />- Referring Physician Name
       <br />
-      <br />Version 2.0.0
+      <br />Version 3.0.0
     </Dialog.Description>
     <div class=" flex justify-center">
       <Dialog.Close class="rounded-md bg-amber-500 px-3 py-2 mt-4 hover:bg-amber-600">
