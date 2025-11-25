@@ -20,7 +20,8 @@ pub fn run() {
             process_dicom,
             commands::get_dicom_tags,
             commands::list_dicom_files,
-            commands::get_pinned_tags_stats
+            commands::get_pinned_tags_stats,
+            commands::get_tag_details
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

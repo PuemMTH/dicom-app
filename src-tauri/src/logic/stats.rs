@@ -128,3 +128,109 @@ where
 
     Ok(result)
 }
+
+#[derive(Debug, Serialize)]
+pub struct TagValueDetail {
+    pub value: String,
+    pub count: usize,
+    pub files: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TagDetails {
+    pub group: u16,
+    pub element: u16,
+    pub name: String,
+    pub values: Vec<TagValueDetail>,
+}
+
+pub fn get_tag_details<F>(
+    folder: &Path,
+    group: u16,
+    element: u16,
+    progress_callback: F,
+) -> Result<TagDetails>
+where
+    F: Fn(StatsProgress) + Sync + Send,
+{
+    let files = collect_dicom_files(folder);
+    let total = files.len();
+    let processed_count = AtomicUsize::new(0);
+    let tag = Tag(group, element);
+
+    // Map: Value -> Vec<FilePath>
+    let value_map: HashMap<String, Vec<String>> = files
+        .par_iter()
+        .fold(
+            || HashMap::new(),
+            |mut acc: HashMap<String, Vec<String>>, file_path| {
+                let current = processed_count.fetch_add(1, Ordering::Relaxed) + 1;
+                if current % 10 == 0 || current == total {
+                    progress_callback(StatsProgress { current, total });
+                }
+
+                if let Ok(obj) = open_file(file_path) {
+                    let value = if (group, element) == (0x7fe0, 0x0010) {
+                        if obj.element(tag).is_err() {
+                            "Missing".to_string()
+                        } else {
+                            match obj.decode_pixel_data() {
+                                Ok(data) => match data.to_dynamic_image(0) {
+                                    Ok(_) => "Binary".to_string(),
+                                    Err(_) => "Error".to_string(),
+                                },
+                                Err(_) => "Error".to_string(),
+                            }
+                        }
+                    } else if let Ok(elem) = obj.element(tag) {
+                        if let Ok(v) = elem.to_str() {
+                            v.to_string()
+                        } else {
+                            "<binary/unknown>".to_string()
+                        }
+                    } else {
+                        "Missing".to_string()
+                    };
+
+                    acc.entry(value)
+                        .or_default()
+                        .push(file_path.to_string_lossy().to_string());
+                }
+
+                acc
+            },
+        )
+        .reduce(
+            || HashMap::new(),
+            |mut acc, part| {
+                for (val, mut file_paths) in part {
+                    acc.entry(val).or_default().append(&mut file_paths);
+                }
+                acc
+            },
+        );
+
+    let name = dicom::dictionary_std::StandardDataDictionary
+        .by_tag(tag)
+        .map(|e| e.alias.to_string())
+        .unwrap_or_else(|| "Unknown".to_string());
+
+    let mut values: Vec<TagValueDetail> = value_map
+        .into_iter()
+        .map(|(value, files)| TagValueDetail {
+            value,
+            count: files.len(),
+            files,
+        })
+        .collect();
+
+    // Sort by count descending
+    values.sort_by(|a, b| b.count.cmp(&a.count));
+
+    Ok(TagDetails {
+        group,
+        element,
+        name,
+        values,
+    })
+}

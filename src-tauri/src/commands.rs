@@ -213,3 +213,20 @@ pub async fn get_pinned_tags_stats(
 
     Ok(result)
 }
+
+#[tauri::command]
+pub async fn get_tag_details(
+    app: AppHandle,
+    folder: String,
+    group: u16,
+    element: u16,
+) -> Result<crate::logic::stats::TagDetails, String> {
+    let path = std::path::Path::new(&folder);
+    if !path.exists() || !path.is_dir() {
+        return Err("Invalid folder path".to_string());
+    }
+    crate::logic::stats::get_tag_details(path, group, element, |progress| {
+        let _ = app.emit("tag_details_progress", progress);
+    })
+    .map_err(|e| e.to_string())
+}
