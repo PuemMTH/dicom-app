@@ -3,7 +3,7 @@ use anyhow::Result;
 use dicom::core::dictionary::DataDictionary;
 use dicom::core::Tag;
 use dicom::object::open_file;
-use dicom_pixeldata::PixelDecoder;
+
 use rayon::prelude::*;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -63,22 +63,12 @@ where
                         let tag = Tag(group, element);
 
                         let value = if (group, element) == (0x7fe0, 0x0010) {
-                            if obj.element(tag).is_err() {
-                                "Missing".to_string()
-                            } else {
-                                match obj.decode_pixel_data() {
-                                    Ok(data) => match data.to_dynamic_image(0) {
-                                        Ok(_) => "Binary".to_string(),
-                                        Err(_) => "Error".to_string(),
-                                    },
-                                    Err(_) => "Error".to_string(),
-                                }
-                            }
+                            crate::models::metadata::extract_pixel_data_status(&obj)
                         } else if let Ok(elem) = obj.element(tag) {
                             if let Ok(v) = elem.to_str() {
                                 v.to_string()
                             } else {
-                                "<binary/unknown>".to_string()
+                                "Binary".to_string()
                             }
                         } else {
                             "Missing".to_string()
@@ -171,22 +161,12 @@ where
 
                 if let Ok(obj) = open_file(file_path) {
                     let value = if (group, element) == (0x7fe0, 0x0010) {
-                        if obj.element(tag).is_err() {
-                            "Missing".to_string()
-                        } else {
-                            match obj.decode_pixel_data() {
-                                Ok(data) => match data.to_dynamic_image(0) {
-                                    Ok(_) => "Binary".to_string(),
-                                    Err(_) => "Error".to_string(),
-                                },
-                                Err(_) => "Error".to_string(),
-                            }
-                        }
+                        crate::models::metadata::extract_pixel_data_status(&obj)
                     } else if let Ok(elem) = obj.element(tag) {
                         if let Ok(v) = elem.to_str() {
                             v.to_string()
                         } else {
-                            "<binary/unknown>".to_string()
+                            "Binary".to_string()
                         }
                     } else {
                         "Missing".to_string()

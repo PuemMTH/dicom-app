@@ -30,6 +30,7 @@ fn write_metadata_csv(path: &Path, rows: &[FileMetadata]) -> Result<()> {
         "Study_description",
         "Series_description",
         "Institution_name",
+        "Pixel_data",
         "Im_width",
         "Im_height",
         "Pixel_spacing",
@@ -44,6 +45,7 @@ fn write_metadata_csv(path: &Path, rows: &[FileMetadata]) -> Result<()> {
             metadata.study_description.as_deref().unwrap_or(""),
             metadata.series_description.as_deref().unwrap_or(""),
             metadata.institution_name.as_deref().unwrap_or(""),
+            metadata.pixel_data.as_deref().unwrap_or(""),
             &metadata.im_width.map(|v| v.to_string()).unwrap_or_default(),
             &metadata
                 .im_height
