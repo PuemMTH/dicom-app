@@ -1,12 +1,9 @@
 use crate::logic::convert::{convert_single_file, FileOutcome};
-use crate::models::metadata::FileMetadata;
 use crate::utils::discovery::collect_dicom_files;
-use crate::utils::logging::{write_logs, LogEntry};
-use crate::utils::metadata_export::write_metadata_report;
+use crate::utils::logging::LogEntry;
 use anyhow::{bail, Context, Result};
 use owo_colors::OwoColorize;
 use rayon::prelude::*;
-use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -40,7 +37,7 @@ pub fn convert_dicom_to_png<F, G>(
 ) -> Result<ConversionReport>
 where
     F: Fn(ProgressPayload) + Sync + Send,
-    G: Fn(LogEntry) + Sync + Send,
+    G: Fn(LogEntry) + Sync + Send + 'static,
 {
     if !input_folder.exists() {
         bail!("Input folder '{}' does not exist", input_folder.display());
@@ -83,19 +80,181 @@ where
     }
 
     let total = tasks.len();
-    let mut successful = 0usize;
-    let mut failed_files = Vec::new();
-    let mut skipped_files = Vec::new();
-    let mut all_metadata = Vec::new();
-    let mut folder_metadata: BTreeMap<PathBuf, Vec<FileMetadata>> = BTreeMap::new();
-    let mut logs: Vec<LogEntry> = Vec::new();
-    let mut skipped_count = 0usize;
-
     let processed_count = AtomicUsize::new(0);
 
-    let results: Vec<_> = tasks
+    // Channel for sending results to the writer thread
+    let (tx, rx) = std::sync::mpsc::channel::<(PathBuf, Result<FileOutcome>, PathBuf)>();
+
+    // Spawn writer thread
+    let writer_handle = std::thread::spawn({
+        let png_output_path = png_output_path.clone();
+        let root_output_path = root_output_path.clone();
+        move || -> Result<ConversionReport> {
+            let mut successful = 0usize;
+            let mut failed_files = Vec::new();
+            let mut skipped_files = Vec::new();
+            let mut logs: Vec<LogEntry> = Vec::new();
+            let mut skipped_count = 0usize;
+
+            // Initialize metadata writer if needed
+            let mut metadata_writer = if save_excel {
+                Some(crate::utils::metadata_export::MetadataWriter::new(
+                    &png_output_path,
+                )?)
+            } else {
+                None
+            };
+
+            // Initialize log writer
+            let mut log_writer = crate::utils::logging::LogWriter::new(&root_output_path)?;
+
+            for (dicom_path, outcome, folder_relative) in rx {
+                match outcome {
+                    Ok(FileOutcome::Converted(mut metadata)) => {
+                        metadata.folder_relative = folder_relative;
+                        if let Some(writer) = &mut metadata_writer {
+                            writer.write_record(&metadata)?;
+                        }
+                        successful += 1;
+                        let entry = LogEntry {
+                            file_name: dicom_path
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or("unknown")
+                                .to_string(),
+                            file_path: dicom_path.to_string_lossy().to_string(),
+                            success: true,
+                            status: "Success".to_string(),
+                            message: "Converted successfully".to_string(),
+                            conversion_type: "PNG".to_string(),
+                        };
+                        log_callback(entry.clone());
+                        log_writer.write_entry(&entry)?;
+                        logs.push(entry);
+                    }
+                    Ok(FileOutcome::Skipped {
+                        mut metadata,
+                        reason,
+                    }) => {
+                        metadata.folder_relative = folder_relative;
+                        if let Some(writer) = &mut metadata_writer {
+                            writer.write_record(&metadata)?;
+                        }
+                        skipped_count += 1;
+                        skipped_files.push(
+                            dicom_path
+                                .file_name()
+                                .and_then(|name| name.to_str())
+                                .map(String::from)
+                                .unwrap_or_else(|| dicom_path.to_string_lossy().to_string()),
+                        );
+                        println!(
+                            "{} Skipping {} ({reason})",
+                            "∙".cyan(),
+                            dicom_path.display()
+                        );
+                        let entry = LogEntry {
+                            file_name: dicom_path
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or("unknown")
+                                .to_string(),
+                            file_path: dicom_path.to_string_lossy().to_string(),
+                            success: true,
+                            status: "Skipped".to_string(),
+                            message: reason.clone(),
+                            conversion_type: "PNG".to_string(),
+                        };
+                        log_callback(entry.clone());
+                        log_writer.write_entry(&entry)?;
+                        logs.push(entry);
+                    }
+                    Ok(FileOutcome::Failed {
+                        mut metadata,
+                        error,
+                    }) => {
+                        metadata.folder_relative = folder_relative;
+                        // Optionally write failed metadata too? Original code did register it.
+                        if let Some(writer) = &mut metadata_writer {
+                            writer.write_record(&metadata)?;
+                        }
+                        eprintln!(
+                            "{} Failed to convert {}:\n{:#}",
+                            "✖".red(),
+                            dicom_path.display(),
+                            error
+                        );
+                        failed_files.push(
+                            dicom_path
+                                .file_name()
+                                .and_then(|name| name.to_str())
+                                .map(String::from)
+                                .unwrap_or_else(|| dicom_path.to_string_lossy().to_string()),
+                        );
+                        let entry = LogEntry {
+                            file_name: dicom_path
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or("unknown")
+                                .to_string(),
+                            file_path: dicom_path.to_string_lossy().to_string(),
+                            success: false,
+                            status: "Failed".to_string(),
+                            message: error.to_string(),
+                            conversion_type: "PNG".to_string(),
+                        };
+                        log_callback(entry.clone());
+                        log_writer.write_entry(&entry)?;
+                        logs.push(entry);
+                    }
+                    Err(err) => {
+                        eprintln!(
+                            "{} Critical error processing {}:\n{:#}",
+                            "✖".red(),
+                            dicom_path.display(),
+                            err
+                        );
+                        failed_files.push(
+                            dicom_path
+                                .file_name()
+                                .and_then(|name| name.to_str())
+                                .map(String::from)
+                                .unwrap_or_else(|| dicom_path.to_string_lossy().to_string()),
+                        );
+                        let entry = LogEntry {
+                            file_name: dicom_path
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or("unknown")
+                                .to_string(),
+                            file_path: dicom_path.to_string_lossy().to_string(),
+                            success: false,
+                            status: "Failed".to_string(),
+                            message: err.to_string(),
+                            conversion_type: "PNG".to_string(),
+                        };
+                        log_callback(entry.clone());
+                        log_writer.write_entry(&entry)?;
+                        logs.push(entry);
+                    }
+                }
+            }
+
+            Ok(ConversionReport {
+                total,
+                successful,
+                failed: total.saturating_sub(successful + skipped_count),
+                skipped_non_image: skipped_count,
+                failed_files,
+                skipped_files,
+                output_folder: root_output_path,
+            })
+        }
+    });
+
+    tasks
         .par_iter()
-        .map(|(dicom_path, png_path, folder_relative)| {
+        .for_each_with(tx, |tx, (dicom_path, png_path, folder_relative)| {
             let current = processed_count.fetch_add(1, Ordering::Relaxed) + 1;
             let filename = dicom_path
                 .file_name()
@@ -114,14 +273,15 @@ where
                 // Try to read metadata from DICOM file for the report
                 let metadata = crate::logic::convert::extract_metadata(dicom_path).ok();
 
-                return (
-                    dicom_path,
+                let _ = tx.send((
+                    dicom_path.clone(),
                     Ok(FileOutcome::Skipped {
                         metadata: metadata.unwrap_or_default(), // Fallback if read fails
                         reason: "already exists".to_string(),
                     }),
-                    folder_relative,
-                );
+                    folder_relative.clone(),
+                ));
+                return;
             }
 
             progress_callback(ProgressPayload {
@@ -132,170 +292,11 @@ where
             });
 
             let outcome = convert_single_file(dicom_path, png_path);
-            (dicom_path, outcome, folder_relative)
-        })
-        .collect();
+            let _ = tx.send((dicom_path.clone(), outcome, folder_relative.clone()));
+        });
 
-    for (dicom_path, outcome, folder_relative) in results {
-        // Helper to register metadata
-        let mut register_metadata = |mut metadata: FileMetadata| {
-            metadata.folder_relative = folder_relative.clone();
-            folder_metadata
-                .entry(folder_relative.clone())
-                .or_default()
-                .push(metadata.clone());
-            all_metadata.push(metadata);
-        };
-
-        match outcome {
-            Ok(FileOutcome::Converted(metadata)) => {
-                register_metadata(metadata);
-                successful += 1;
-                let entry = LogEntry {
-                    file_name: dicom_path
-                        .file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or("unknown")
-                        .to_string(),
-                    file_path: dicom_path.to_string_lossy().to_string(),
-                    success: true,
-                    status: "Success".to_string(),
-                    message: "Converted successfully".to_string(),
-                    conversion_type: "PNG".to_string(),
-                };
-                log_callback(entry.clone());
-                logs.push(entry);
-            }
-            Ok(FileOutcome::Skipped { metadata, reason }) => {
-                register_metadata(metadata);
-                skipped_count += 1;
-                skipped_files.push(
-                    dicom_path
-                        .file_name()
-                        .and_then(|name| name.to_str())
-                        .map(String::from)
-                        .unwrap_or_else(|| dicom_path.to_string_lossy().to_string()),
-                );
-                println!(
-                    "{} Skipping {} ({reason})",
-                    "∙".cyan(),
-                    dicom_path.display()
-                );
-                let entry = LogEntry {
-                    file_name: dicom_path
-                        .file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or("unknown")
-                        .to_string(),
-                    file_path: dicom_path.to_string_lossy().to_string(),
-                    success: true,
-                    status: "Skipped".to_string(),
-                    message: reason.clone(),
-                    conversion_type: "PNG".to_string(),
-                };
-                log_callback(entry.clone());
-                logs.push(entry);
-            }
-            Ok(FileOutcome::Failed { metadata, error }) => {
-                register_metadata(metadata);
-                eprintln!(
-                    "{} Failed to convert {}:\n{:#}",
-                    "✖".red(),
-                    dicom_path.display(),
-                    error
-                );
-                failed_files.push(
-                    dicom_path
-                        .file_name()
-                        .and_then(|name| name.to_str())
-                        .map(String::from)
-                        .unwrap_or_else(|| dicom_path.to_string_lossy().to_string()),
-                );
-                logs.push(LogEntry {
-                    file_name: dicom_path
-                        .file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or("unknown")
-                        .to_string(),
-                    file_path: dicom_path.to_string_lossy().to_string(),
-                    success: false,
-                    status: "Failed".to_string(),
-                    message: error.to_string(),
-                    conversion_type: "PNG".to_string(),
-                });
-                log_callback(LogEntry {
-                    file_name: dicom_path
-                        .file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or("unknown")
-                        .to_string(),
-                    file_path: dicom_path.to_string_lossy().to_string(),
-                    success: false,
-                    status: "Failed".to_string(),
-                    message: error.to_string(),
-                    conversion_type: "PNG".to_string(),
-                });
-            }
-            Err(err) => {
-                // This case should be rare now as convert_single_file catches most errors
-                eprintln!(
-                    "{} Critical error processing {}:\n{:#}",
-                    "✖".red(),
-                    dicom_path.display(),
-                    err
-                );
-                failed_files.push(
-                    dicom_path
-                        .file_name()
-                        .and_then(|name| name.to_str())
-                        .map(String::from)
-                        .unwrap_or_else(|| dicom_path.to_string_lossy().to_string()),
-                );
-                logs.push(LogEntry {
-                    file_name: dicom_path
-                        .file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or("unknown")
-                        .to_string(),
-                    file_path: dicom_path.to_string_lossy().to_string(),
-                    success: false,
-                    status: "Failed".to_string(),
-                    message: err.to_string(),
-                    conversion_type: "PNG".to_string(),
-                });
-                log_callback(LogEntry {
-                    file_name: dicom_path
-                        .file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or("unknown")
-                        .to_string(),
-                    file_path: dicom_path.to_string_lossy().to_string(),
-                    success: false,
-                    status: "Failed".to_string(),
-                    message: err.to_string(),
-                    conversion_type: "PNG".to_string(),
-                });
-            }
-        }
-    }
-
-    if save_excel {
-        write_metadata_report(&all_metadata, &png_output_path)
-            .context("Unable to write metadata report")?;
-    }
-
-    // Write logs
-    write_logs(&root_output_path, &logs).context("Unable to write logs")?;
-
-    Ok(ConversionReport {
-        total,
-        successful,
-        failed: total.saturating_sub(successful + skipped_count),
-        skipped_non_image: skipped_count,
-        failed_files,
-        skipped_files,
-        output_folder: root_output_path,
-    })
+    // Wait for writer thread to finish
+    writer_handle.join().unwrap()
 }
 
 fn build_png_path(input_folder: &Path, output_folder: &Path, dicom_path: &Path) -> PathBuf {

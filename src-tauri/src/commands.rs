@@ -18,8 +18,11 @@ pub async fn convert_dicom(
         |progress| {
             let _ = app.emit("conversion_progress", progress);
         },
-        |log| {
-            let _ = app.emit("log_event", log);
+        {
+            let app = app.clone();
+            move |log| {
+                let _ = app.emit("log_event", log);
+            }
         },
     ) {
         Ok(report) => {
@@ -51,8 +54,11 @@ pub async fn anonymize_dicom(
         |progress| {
             let _ = app.emit("anonymization_progress", progress);
         },
-        |log| {
-            let _ = app.emit("log_event", log);
+        {
+            let app = app.clone();
+            move |log| {
+                let _ = app.emit("log_event", log);
+            }
         },
     ) {
         Ok(report) => {
@@ -110,8 +116,11 @@ pub async fn process_dicom(
             |progress| {
                 let _ = app.emit("conversion_progress", progress);
             },
-            |log| {
-                let _ = app.emit("log_event", log);
+            {
+                let app = app.clone();
+                move |log| {
+                    let _ = app.emit("log_event", log);
+                }
             },
         ) {
             Ok(conversion_report) => {
@@ -135,8 +144,11 @@ pub async fn process_dicom(
             |progress| {
                 let _ = app.emit("anonymization_progress", progress);
             },
-            |log| {
-                let _ = app.emit("log_event", log);
+            {
+                let app = app.clone();
+                move |log| {
+                    let _ = app.emit("log_event", log);
+                }
             },
         ) {
             Ok(anonymization_report) => {

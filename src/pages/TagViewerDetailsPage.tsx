@@ -185,11 +185,16 @@ const TagViewerDetailsPage: Component = () => {
                                                                         <ul class="space-y-1">
                                                                             <For each={item.files}>
                                                                                 {(file) => (
-                                                                                    <li class="text-xs font-mono truncate hover:text-primary cursor-default" title={file}>
+                                                                                    <li class="text-xs font-mono break-all hover:text-primary cursor-default" title={file}>
                                                                                         {file}
                                                                                     </li>
                                                                                 )}
                                                                             </For>
+                                                                            <Show when={item.count > item.files.length}>
+                                                                                <li class="text-xs font-bold text-base-content/50 pt-2 pl-2">
+                                                                                    ...and {item.count - item.files.length} more files
+                                                                                </li>
+                                                                            </Show>
                                                                         </ul>
                                                                     </div>
                                                                 </td>

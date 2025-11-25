@@ -197,10 +197,14 @@ where
 
     let mut values: Vec<TagValueDetail> = value_map
         .into_iter()
-        .map(|(value, files)| TagValueDetail {
-            value,
-            count: files.len(),
-            files,
+        .map(|(value, files)| {
+            let count = files.len();
+            let truncated_files = files.into_iter().take(100).collect();
+            TagValueDetail {
+                value,
+                count,
+                files: truncated_files,
+            }
         })
         .collect();
 

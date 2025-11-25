@@ -327,7 +327,7 @@ export default function HomePage() {
                     <div class="flex gap-4 text-sm">
                       <span class="text-success font-bold">Success: {anonymizationReport()?.successful}</span>
                       <span class="text-error font-bold">Failed: {anonymizationReport()?.failed}</span>
-                      <span class="text-warning font-bold">Skipped: {anonymizationReport()?.skipped}</span>
+                      <span class="text-warning font-bold">Already exists: {anonymizationReport()?.skipped}</span>
                       <span class="font-bold">Total: {anonymizationReport()?.total}</span>
                     </div>
                   </Show>
@@ -359,7 +359,7 @@ export default function HomePage() {
                     <div class="flex gap-4 text-sm">
                       <span class="text-success font-bold">Success: {conversionReport()?.successful}</span>
                       <span class="text-error font-bold">Failed: {conversionReport()?.failed}</span>
-                      <span class="text-warning font-bold">Skipped: {conversionReport()?.skipped_non_image}</span>
+                      <span class="text-warning font-bold">Already exists: {conversionReport()?.skipped_non_image}</span>
                       <span class="font-bold">Total: {conversionReport()?.total}</span>
                     </div>
                   </Show>
@@ -411,7 +411,7 @@ const DialogInfomation = () => (
       <br />- Institution Name
       <br />- Referring Physician Name
       <br />
-      <br />Version 2.0.0
+      <br />Version 3.0.0
     </Dialog.Description>
     <div class=" flex justify-center">
       <Dialog.Close class="rounded-md bg-amber-500 px-3 py-2 mt-4 hover:bg-amber-600">
