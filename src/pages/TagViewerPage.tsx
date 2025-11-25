@@ -163,8 +163,6 @@ const TagViewerPage: Component = () => {
         }
     };
 
-    // ... existing code
-
     const openFolder = async () => {
         try {
             const selected = await open({
@@ -187,10 +185,10 @@ const TagViewerPage: Component = () => {
             setFileList(files);
             setCurrentPage(1); // Reset to first page on new folder load
             // Removed auto-loading of the first file
-            // if (files.length > 0) {
-            //     setFilePath(files[0]);
-            //     loadTags(files[0]);
-            // }
+            if (files.length > 0) {
+                setFilePath(files[0]);
+                loadTags(files[0]);
+            }
         } catch (err) {
             setError(err as string);
         } finally {

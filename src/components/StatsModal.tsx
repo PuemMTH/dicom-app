@@ -1,5 +1,6 @@
 import { Component, createSignal, Show, For, onMount } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+import { A } from "@solidjs/router";
 
 interface TagStat {
     group: number;
@@ -104,6 +105,15 @@ const StatsModal: Component<StatsModalProps> = (props) => {
                                                 {stat.name}
                                                 <span class="text-xs font-mono opacity-50">
                                                     ({stat.group.toString(16).padStart(4, "0").toUpperCase()},{stat.element.toString(16).padStart(4, "0").toUpperCase()})
+                                                </span>
+
+                                                <span class="text-xs opacity-50 ml-auto text-primary">
+                                                    <A
+                                                        class="link link-hover text-xs ml-auto"
+                                                        href={`/tags/${stat.group}/${stat.element}`}
+                                                    >
+                                                        Click for details
+                                                    </A>
                                                 </span>
                                             </h4>
 

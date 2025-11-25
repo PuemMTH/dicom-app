@@ -183,6 +183,7 @@ pub async fn list_dicom_files(folder: String) -> Result<Vec<String>, String> {
 #[tauri::command]
 pub async fn get_pinned_tags_stats(
     app: AppHandle,
+    cache: tauri::State<'_, crate::logic::stats::StatsCache>,
     folder: String,
     tags: Vec<(u16, u16)>,
 ) -> Result<Vec<crate::logic::stats::TagStat>, String> {
@@ -190,8 +191,25 @@ pub async fn get_pinned_tags_stats(
     if !path.exists() || !path.is_dir() {
         return Err("Invalid folder path".to_string());
     }
-    crate::logic::stats::calculate_stats(path, tags, |progress| {
+
+    // Check cache
+    {
+        let cache_lock = cache.0.lock().map_err(|e| e.to_string())?;
+        if let Some(cached_result) = cache_lock.get(&(folder.clone(), tags.clone())) {
+            return Ok(cached_result.clone());
+        }
+    }
+
+    let result = crate::logic::stats::calculate_stats(path, tags.clone(), |progress| {
         let _ = app.emit("stats_progress", progress);
     })
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+
+    // Update cache
+    {
+        let mut cache_lock = cache.0.lock().map_err(|e| e.to_string())?;
+        cache_lock.insert((folder, tags), result.clone());
+    }
+
+    Ok(result)
 }

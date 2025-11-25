@@ -10,12 +10,20 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct TagStat {
     pub group: u16,
     pub element: u16,
     pub name: String,
     pub value_counts: HashMap<String, usize>,
+}
+
+pub struct StatsCache(pub std::sync::Mutex<HashMap<(String, Vec<(u16, u16)>), Vec<TagStat>>>);
+
+impl Default for StatsCache {
+    fn default() -> Self {
+        Self(std::sync::Mutex::new(HashMap::new()))
+    }
 }
 
 #[derive(Clone, Serialize)]
