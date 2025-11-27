@@ -7,6 +7,23 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+# .cargo/config.toml
+[target.x86_64-pc-windows-msvc]
+rustflags = [
+  "-C", "link-arg=/NODEFAULTLIB:MSVCRTD",
+  "-C", "link-arg=/FORCE:UNRESOLVED"   # optional, suppresses some noise
+]
+
+# Force charls-sys to build in release mode even during dev
+[profile.dev.package.charls-sys]
+opt-level = 3
+debug = false
+
+# Sometimes the crate is called charls_sys (with underscore)
+[profile.dev.package.charls_sys]
+opt-level = 3
+debug = false
+
 [lib]
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
