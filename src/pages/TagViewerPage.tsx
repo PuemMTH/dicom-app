@@ -33,6 +33,7 @@ const TagViewerPage: Component = () => {
     const [isDragging, setIsDragging] = createSignal(false);
     const [showStats, setShowStats] = createSignal(false);
     const [currentPage, setCurrentPage] = createSignal(1);
+    const [showAllTags, setShowAllTags] = createSignal(false);
     const itemsPerPage = 20;
 
     let parentRef: HTMLDivElement | undefined;
@@ -51,8 +52,14 @@ const TagViewerPage: Component = () => {
                 { group: 0x0010, element: 0x0010 },
                 { group: 0x0010, element: 0x0020 },
                 { group: 0x0010, element: 0x0030 },
+                { group: 0x0008, element: 0x0060 },
+                { group: 0x0008, element: 0x0070 },
                 { group: 0x0008, element: 0x0080 },
                 { group: 0x0008, element: 0x0090 },
+                { group: 0x0008, element: 0x1030 },
+                { group: 0x0018, element: 0x0015 },
+                { group: 0x0018, element: 0x1030 },
+                { group: 0x0018, element: 0x5101 },
             ]);
         }
     };
@@ -96,10 +103,14 @@ const TagViewerPage: Component = () => {
             );
         }
 
+        const pinnedSet = pinnedTagSet();
         // Sort: Pinned first, then by group/element
         // Create a local reference to the set to avoid calling the signal in the loop if possible,
         // though calling the memo accessor is cheap.
-        const pinnedSet = pinnedTagSet();
+        // Filter out unpinned tags if not showing all
+        if (!showAllTags() && !filter) {
+            currentTags = currentTags.filter(tag => pinnedSet.has(`${tag.group}-${tag.element}`));
+        }
 
         // We need to copy the array before sorting to avoid mutating the original if it came from a store or similar,
         // though here it comes from tags() which is a signal of an array. 
@@ -344,7 +355,7 @@ const TagViewerPage: Component = () => {
                     </Show>
 
                     <div class="flex-1 border border-base-300 rounded-lg overflow-hidden flex flex-col bg-base-100 shadow-sm">
-                        <div class="p-2 bg-base-200 border-b border-base-300">
+                        <div class="p-2 bg-base-200 border-b border-base-300 flex gap-2">
                             <input
                                 type="text"
                                 placeholder="Filter tags by name, value, or group/element..."
@@ -352,6 +363,23 @@ const TagViewerPage: Component = () => {
                                 value={filterText()}
                                 onInput={(e) => setFilterText(e.currentTarget.value)}
                             />
+                            <button
+                                class="btn btn-sm btn-circle btn-ghost"
+                                onClick={() => setShowAllTags(!showAllTags())}
+                                title={showAllTags() ? "ซ่อน" : "แสดงเพิ่ม"}
+                            >
+                                {showAllTags() ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+                                        <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c4.61 0 8.55 3.02 9.9 7.2a.48.48 0 0 1 0 .4c-.8 2.1-3.2 5.1-7.9 6.3M6.41 6.41 3 3m3.41 3.41a10.43 10.43 0 0 0-3.7 5.8.48.48 0 0 0 0 .4c1.3 3.4 5.1 6.3 9.9 6.3M6.41 6.41 17.59 17.59" />
+                                    </svg>
+                                ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M12 5c-4.61 0-8.55 3.02-9.9 7.2.08.22.14.43.18.66.04-.23.1-.44.18-.66C3.73 8.02 7.67 5 12 5s8.27 3.02 9.54 7.2c-.08.22-.14.43-.18.66.04-.23.1-.44.18-.66C20.27 8.02 16.33 5 12 5z" />
+                                        <circle cx="12" cy="12" r="3" />
+                                    </svg>
+                                )}
+                            </button>
                         </div>
                         <div class="grid grid-cols-12 gap-4 p-2 font-bold bg-base-200 border-b border-base-300 text-sm">
                             <div class="col-span-1 text-center">Pin</div>

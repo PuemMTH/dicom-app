@@ -58,11 +58,13 @@ export default function HomePage() {
   const [isProcessing, setIsProcessing] = createSignal(false);
 
   // Configuration (Hidden/Default)
-  const tagsInput = "0010,0010; 0010,0020; 0010,0030; 0008,0080; 0008,0090";
+  const tagsInput = "0010,0010; 0010,0020; 0010,0030; 0010,1000; 0010,1001; 0008,0080; 0008,0090";
   // Comment tags
   // 0010,0010 = PatientName
   // 0010,0020 = PatientID
   // 0010,0030 = PatientBirthDate
+  // 0010,1000 = OtherPatientIDs
+  // 0010,1001 = OtherPatientNames
   // 0008,0080 = InstitutionName
   // 0008,0090 = ReferringPhysicianName
   const replacementValue = "ANONYMIZED";
