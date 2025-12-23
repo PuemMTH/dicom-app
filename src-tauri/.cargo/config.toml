@@ -1,0 +1,5 @@
+[target.x86_64-pc-windows-msvc]
+rustflags = [
+  "-C", "link-arg=/NODEFAULTLIB:MSVCRTD",
+  "-C", "link-arg=/FORCE:UNRESOLVED"   # optional, suppresses some noise
+]
