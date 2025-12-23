@@ -410,6 +410,8 @@ const DialogInfomation = () => (
       <br />- Patient Name
       <br />- Patient ID
       <br />- Patient Birth Date
+      <br />- Other Patient IDs
+      <br />- Other Patient Names
       <br />- Institution Name
       <br />- Referring Physician Name
       <br />
